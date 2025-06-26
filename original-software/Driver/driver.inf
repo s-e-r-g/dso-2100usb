@@ -1,0 +1,95 @@
+[Version]
+Signature="$CHICAGO$"
+Class=USB
+;Class=DSOCARD
+provider=%TEST%
+
+;===============================
+;CatalogFile =  cb002rwu.cat
+;CatalogFile.NT = cb002rku.cat
+DriverVer=06/06/2005 , 72.099.056.006
+;===============================
+LayoutFile=layout.inf
+;===============================
+[ControlFlags]
+ExcludeFromSelect = USB\VID_0547&PID_1006
+;===============================
+[ClassInstall32]
+Addreg=DSOCardClassReg     
+[DSOCardClassReg]
+HKR,,,0,%DSO%
+HKR,,Icon,,-5
+[Manufacturer]
+%DSO2100U%=DSO2100U
+[DSO2100U]
+%USB\VID_0547&PID_1006.DeviceDesc%=DSO2100UF.DEV, USB\VID_0547&PID_1006
+%USB\VID_0547&PID_1002.DeviceDesc%=DSO2100US.DEV, USB\VID_0547&PID_1002
+[ControlFlags]
+ExcludeFromSelect=*  ; remove all device here from the device installer list
+[PreCopySection]
+HKR,,NoSetupUI,,1
+[DestinationDirs]
+DefaultDestDir=10,System32\Drivers
+DLLCopyFiles=11     ; system for win9X, or system32 for Win2K
+[SourceDisksFiles]
+dso21002.sys=1
+dso21001.sys=1
+[SourceDisksNames]
+1=%INSTDISK%,,,
+[DLLCopyFiles]
+[DSO2100UF.DEV]
+CopyFiles=DSO2100U.Files.Ext, DLLCopyFiles
+AddReg= DSO2100UF_98.AddReg
+DriverVer=06/06/2005 , 72.099.056.006
+
+[DSO2100UF.DEV.NT]
+CopyFiles=DSO2100U.Files.Ext, DLLCopyFiles
+AddReg= DSO2100UF_2k.AddReg
+DriverVer=06/06/2005 , 72.099.056.006
+[DSO2100US.DEV]
+CopyFiles=DSO2100U.Files.Ext, DLLCopyFiles
+AddReg= DSO2100US_98.AddReg
+DriverVer=06/06/2005 , 72.099.056.006
+[DSO2100US.DEV.NT]
+CopyFiles=DSO2100U.Files.Ext, DLLCopyFiles
+AddReg= DSO2100US_2k.AddReg
+DriverVer=06/06/2005 , 72.099.056.006
+[DSO2100UF.Dev.NT.Services]
+Addservice = DSO2100UDRF, 0x00000002, DS02100UDRF.AddService
+[DS02100UDRF.AddService]
+DisplayName    = %DS02100UDRF.SvcDesc%
+ServiceType    = 1                  ; SERVICE_KERNEL_DRIVER
+StartType      = 2                  ; SERVICE_AUTO_START
+ErrorControl   = 1                  ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %10%\System32\Drivers\dso21001.sys
+LoadOrderGroup = Base
+[DSO2100UF_98.AddReg]
+HKR,,DevLoader,,*ntkern
+HKR,,NTMPDriver,,dso21001.sys
+[DSO2100UF_2k.AddReg]
+HKR,,DevLoader,,*ntkern
+HKR,,NTMPDriver,,dso21001.sys
+[DSO2100US.Dev.NT.Services]
+Addservice = DSO2100UDRS, 0x00000002, DS02100UDRS.AddService
+[DS02100UDRS.AddService]
+DisplayName    = %DS02100UDRS.SvcDesc%
+ServiceType    = 1                  ; SERVICE_KERNEL_DRIVER
+StartType      = 2                  ; SERVICE_AUTO_START
+ErrorControl   = 1                  ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %10%\System32\Drivers\dso21002.sys
+LoadOrderGroup = Base
+[DSO2100US_98.AddReg]
+HKR,,DevLoader,,*ntkern
+HKR,,NTMPDriver,,dso21002.sys
+[DSO2100US_2k.AddReg]
+HKR,,DevLoader,,*ntkern
+HKR,,NTMPDriver,,dso21002.sys
+[DSO2100U.Files.Ext]
+dso21002.sys,,,2
+dso21001.sys,,,2
+[Strings]
+TEST="dso2100u"
+INSTDISK="dso-2100usb Setup Disc"
+Anchor="oem"
+USB\VID_0547&PID_1006.DeviceDesc="DSO-2100 USB driver1"
+USB\VID_0547&PID_1002.DeviceDesc="DSO-2100 USB driver2"
