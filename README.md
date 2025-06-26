@@ -5,3 +5,5 @@ Git Repos:
 * https://github.com/guntars-lemps/oscope2100 [ Works! ]
 * https://github.com/OpenHantek/openhantek [ Not tested ]
   
+Other sources:
+* https://sigrok.org/wiki/Main_Page [ Wiki with other oscilloscopes ]
