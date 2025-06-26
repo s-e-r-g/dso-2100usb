@@ -1,0 +1,5 @@
+# Voltcraft DSO-2100 USB - bootloader mode (EZ-USB before firmware)
+SUBSYSTEM=="usb", ACTION=="add", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="0547", ATTRS{idProduct}=="1006", TAG+="uaccess"
+
+# Voltcraft DSO-2100 USB - operational mode (after firmware upload)
+SUBSYSTEM=="usb", ACTION=="add", ENV{DEVTYPE}=="usb_device", ATTRS{idVendor}=="0547", ATTRS{idProduct}=="1002", TAG+="uaccess"
