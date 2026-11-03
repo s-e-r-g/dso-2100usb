@@ -18,6 +18,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QFrame>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -53,6 +54,8 @@ constexpr double kLevelRangeDiv          = 5.0;
 constexpr int    kStatusMs               = 6000;
 constexpr int    kMeasRowsVisible        = 5;
 constexpr int    kMeasRowHeight          = 22;
+constexpr int    kChipScaleWidth         = 108;
+constexpr int    kChipCouplingWidth      = 60;
 // autoset
 constexpr double kAutosetStartSecPerDiv  = 1e-3;
 constexpr double kAutosetFillDiv         = 3.6; // largest |V| may use this much of the 4 div
@@ -295,15 +298,20 @@ void MainWindow::BuildToolbar()
                 UpdateView();
             });
 
-    m_cursorMode =
-        new Segmented({tr("Off"), QStringLiteral("X"), QStringLiteral("Y"), QStringLiteral("XY")});
-    m_cursorMode->SetToolTips({tr("No cursors"), tr("Time cursors: read ΔX and 1/ΔX"),
-                               tr("Voltage cursors: read ΔY"), tr("Time and voltage cursors")});
+    m_cursorMode = new Segmented({QStringLiteral("X"), QStringLiteral("Y")});
+    m_cursorMode->SetIndependent();
+    m_cursorMode->SetToolTips({tr("Time cursors: drag them, read ΔX and 1/ΔX on the screen"),
+                               tr("Voltage cursors: drag them, read ΔY on the screen")});
     tb->addWidget(Captioned(tr("CURSORS"), m_cursorMode));
     connect(m_cursorMode, &Segmented::IndexChanged, this,
-            [this](int i)
+            [this]
             {
-                m_display.cursorMode = static_cast<CursorMode>(i);
+                const bool x         = m_cursorMode->IsChecked(0);
+                const bool y         = m_cursorMode->IsChecked(1);
+                m_display.cursorMode = x && y ? CursorMode::kBoth
+                                       : x    ? CursorMode::kTime
+                                       : y    ? CursorMode::kVoltage
+                                              : CursorMode::kOff;
                 UpdateView();
             });
 
@@ -325,11 +333,13 @@ void MainWindow::BuildToolbar()
     tb->addWidget(spacer);
 
     m_trigStatus = new QLabel;
-    m_trigStatus->setMinimumWidth(60);
+    m_trigStatus->setMinimumWidth(92);
     m_trigStatus->setFixedHeight(28);
     m_trigStatus->setAlignment(Qt::AlignCenter);
-    m_trigStatus->setToolTip(tr("T'D: triggered   AUTO: no trigger, showing the signal anyway\n"
-                                "WAIT: waiting for a trigger   STOP: stopped"));
+    m_trigStatus->setToolTip(tr("TRIGGERED: found the trigger edge\n"
+                                "AUTO: no trigger, showing the signal anyway\n"
+                                "WAITING: for a trigger\n"
+                                "STOPPED: not capturing"));
     tb->addWidget(m_trigStatus);
 
     m_connLabel = new QLabel;
@@ -406,6 +416,7 @@ QWidget* MainWindow::BuildChannelBox(size_t c)
             {
                 ch().coupling = static_cast<Core::Coupling>(i);
                 ApplyAcq();
+                SyncUi();
             });
     connect(ui.probe, &Segmented::IndexChanged, this,
             [this, ch, c](int i)
@@ -707,6 +718,58 @@ QWidget* MainWindow::BuildSidePanel()
     return panel;
 }
 
+QWidget* MainWindow::BuildChannelChip(size_t c)
+{
+    ChannelUi&    ui    = m_ch.at(c);
+    const QString color = Theme::kChannel.at(c).name();
+
+    auto* chip = new QFrame;
+    chip->setObjectName(QStringLiteral("chip"));
+    chip->setStyleSheet(
+        QStringLiteral("QFrame#chip { border: 1px solid %1; border-radius: 4px; }"
+                       " QComboBox { min-height: 20px; border: none; background: transparent; }")
+            .arg(color));
+    auto* row = new QHBoxLayout(chip);
+    row->setContentsMargins(0, 0, 2, 0);
+    row->setSpacing(2);
+
+    ui.badge = new QLabel;
+    ui.badge->setStyleSheet(BadgeStyle(Theme::kChannel.at(c)));
+    ui.barVdiv     = new QComboBox;
+    ui.barCoupling = MakeCombo({tr("DC"), tr("AC"), tr("GND")});
+    ui.barVdiv->setFixedWidth(kChipScaleWidth);
+    ui.barCoupling->setFixedWidth(kChipCouplingWidth);
+    ui.barVdiv->setToolTip(tr("Volts per division of this channel"));
+    ui.barCoupling->setToolTip(
+        tr("DC: the whole signal   AC: only the changes   GND: the 0 V line"));
+    row->addWidget(ui.badge);
+    row->addWidget(ui.barVdiv);
+    row->addWidget(ui.barCoupling);
+
+    connect(ui.barVdiv, &QComboBox::currentIndexChanged, this,
+            [this, c](int i)
+            {
+                if (!m_syncing && i >= 0)
+                {
+                    m_acqSettings.ch.at(c).vdivIndex = static_cast<size_t>(i);
+                    m_selChannel                     = static_cast<int>(c);
+                    ApplyAcq();
+                    SyncUi();
+                }
+            });
+    connect(ui.barCoupling, &QComboBox::currentIndexChanged, this,
+            [this, c](int i)
+            {
+                if (!m_syncing && i >= 0)
+                {
+                    m_acqSettings.ch.at(c).coupling = static_cast<Core::Coupling>(i);
+                    ApplyAcq();
+                    SyncUi();
+                }
+            });
+    return chip;
+}
+
 QWidget* MainWindow::BuildBottom()
 {
     auto* w = new QWidget;
@@ -717,20 +780,18 @@ QWidget* MainWindow::BuildBottom()
     auto* badges = new QHBoxLayout;
     for (size_t c = 0; c < 2; ++c)
     {
-        m_ch.at(c).badge = new QLabel;
-        m_ch.at(c).badge->setStyleSheet(BadgeStyle(Theme::kChannel.at(c)));
-        badges->addWidget(m_ch.at(c).badge);
+        badges->addWidget(BuildChannelChip(c));
     }
     m_timeBadge = new QLabel;
     m_trigBadge = new QLabel;
     m_trigBadge->setStyleSheet(BadgeStyle(Theme::kTrigger));
     m_rateBadge = new QLabel;
+    statusBar()->addPermanentWidget(m_rateBadge);
     badges->addSpacing(12);
     badges->addWidget(m_timeBadge);
     badges->addSpacing(12);
     badges->addWidget(m_trigBadge);
     badges->addStretch(1);
-    badges->addWidget(m_rateBadge);
     v->addLayout(badges);
 
     // measurements: foldable, the trace gets the height back
@@ -884,17 +945,19 @@ void MainWindow::ConnectAcquisition()
 
 void MainWindow::FillVdivCombo(size_t c)
 {
-    QComboBox*    combo = m_ch.at(c).vdiv;
-    const QString first =
-        Si(Core::kHwVoltsPerDiv.front() * m_acqSettings.ch.at(c).probe, "V", 3) + tr("/div");
-    if (combo->count() > 0 && combo->itemText(0) == first)
+    const int     probe = m_acqSettings.ch.at(c).probe;
+    const QString first = Si(Core::kHwVoltsPerDiv.front() * probe, "V", 3) + tr("/div");
+    for (QComboBox* combo : {m_ch.at(c).vdiv, m_ch.at(c).barVdiv})
     {
-        return; // same probe: the list is already right
-    }
-    combo->clear();
-    for (const double v : Core::kHwVoltsPerDiv)
-    {
-        combo->addItem(Si(v * m_acqSettings.ch.at(c).probe, "V", 3) + tr("/div"));
+        if (combo->count() > 0 && combo->itemText(0) == first)
+        {
+            continue; // same probe: the list is already right
+        }
+        combo->clear();
+        for (const double v : Core::kHwVoltsPerDiv)
+        {
+            combo->addItem(Si(v * probe, "V", 3) + tr("/div"));
+        }
     }
 }
 
@@ -908,6 +971,8 @@ void MainWindow::SyncUi()
         ui.box->setChecked(s.enabled);
         FillVdivCombo(c);
         ui.vdiv->setCurrentIndex(static_cast<int>(s.vdivIndex));
+        ui.barVdiv->setCurrentIndex(static_cast<int>(s.vdivIndex));
+        ui.barCoupling->setCurrentIndex(static_cast<int>(s.coupling));
         ui.coupling->SetIndex(static_cast<int>(s.coupling));
         ui.probe->SetIndex(static_cast<int>(std::distance(
             Core::kProbeChoices.begin(),
@@ -941,7 +1006,9 @@ void MainWindow::SyncUi()
     m_mathA->SetIndex(static_cast<int>(m_viewSettings.mathA));
     m_mathB->SetIndex(static_cast<int>(m_viewSettings.mathB));
     m_fftWindow->setCurrentIndex(static_cast<int>(m_viewSettings.fftWindow));
-    m_cursorMode->SetIndex(static_cast<int>(m_display.cursorMode));
+    const CursorMode cursors = m_display.cursorMode;
+    m_cursorMode->SetChecked(0, cursors == CursorMode::kTime || cursors == CursorMode::kBoth);
+    m_cursorMode->SetChecked(1, cursors == CursorMode::kVoltage || cursors == CursorMode::kBoth);
     m_cursorSrc->SetIndex(m_display.cursorSource);
     m_syncing = false;
 }
@@ -1030,15 +1097,10 @@ void MainWindow::RedrawStopped()
 
 void MainWindow::UpdateBadges()
 {
-    static const std::array<QString, 3> kCoupling = {tr("DC"), tr("AC"), tr("GND")};
     for (size_t c = 0; c < Core::kChannelCount; ++c)
     {
         const Core::ChannelSettings& s = m_acqSettings.ch.at(c);
-        m_ch.at(c).badge->setText(QStringLiteral("CH%1  %2/div  %3%4")
-                                      .arg(c + 1)
-                                      .arg(Si(s.VoltsPerDiv(), "V", 3))
-                                      .arg(kCoupling.at(static_cast<size_t>(s.coupling)))
-                                      .arg(s.invert ? tr("  inv") : QString()));
+        m_ch.at(c).badge->setText(tr("CH%1").arg(c + 1) + (s.invert ? tr(" inv") : QString()));
         if (m_ch.at(c).badge->isEnabled() != s.enabled)
         {
             m_ch.at(c).badge->setEnabled(s.enabled);
@@ -1101,7 +1163,7 @@ void MainWindow::SetRunning(bool running)
                       "QPushButton { background: #a51d1d; color: white; font-weight: bold; }"));
     if (!running)
     {
-        SetTrigStatus(tr("STOP"), QColor(0xe0, 0x40, 0x40));
+        SetTrigStatus(tr("STOPPED"), QColor(0xe0, 0x40, 0x40));
     }
 }
 
@@ -1126,7 +1188,7 @@ void MainWindow::OnFrame(const App::FramePtr& frame)
     const double processMs            = static_cast<double>(stageTimer.nsecsElapsed()) / 1e6;
     if (!d)
     {
-        SetTrigStatus(tr("WAIT"), QColor(0xff, 0xb0, 0x30));
+        SetTrigStatus(tr("WAITING"), QColor(0xff, 0xb0, 0x30));
         m_view->SetWaiting(true);
         ProfileFrame(*frame, processMs, 0);
         return;
@@ -1137,7 +1199,7 @@ void MainWindow::OnFrame(const App::FramePtr& frame)
     stageTimer.restart();
     if (d->triggered)
     {
-        SetTrigStatus(tr("T'D"), QColor(0x40, 0xd0, 0x60));
+        SetTrigStatus(tr("TRIGGERED"), QColor(0x40, 0xd0, 0x60));
     }
     else
     {

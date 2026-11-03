@@ -45,13 +45,15 @@ protected:
 private:
     struct ChannelUi
     {
-        QGroupBox*      box      = nullptr;
-        QComboBox*      vdiv     = nullptr;
-        Segmented*      coupling = nullptr;
-        Segmented*      probe    = nullptr;
-        QCheckBox*      invert   = nullptr;
-        QDoubleSpinBox* offset   = nullptr;
-        QLabel*         badge    = nullptr;
+        QGroupBox*      box         = nullptr;
+        QComboBox*      vdiv        = nullptr;
+        Segmented*      coupling    = nullptr;
+        Segmented*      probe       = nullptr;
+        QCheckBox*      invert      = nullptr;
+        QDoubleSpinBox* offset      = nullptr;
+        QLabel*         badge       = nullptr;
+        QComboBox*      barVdiv     = nullptr; // the chip under the screen
+        QComboBox*      barCoupling = nullptr;
     };
 
     // one row of the measurement table, with its running statistics
@@ -71,6 +73,7 @@ private:
     void     BuildToolbar();
     QWidget* BuildSidePanel();
     QWidget* BuildChannelBox(size_t c);
+    QWidget* BuildChannelChip(size_t c);
     QWidget* BuildBottom();
     void     ConnectView();
     void     ConnectAcquisition();

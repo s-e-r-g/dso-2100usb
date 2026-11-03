@@ -45,6 +45,25 @@ void Segmented::SetIndex(int index)
     }
 }
 
+void Segmented::SetIndependent()
+{
+    m_group->setExclusive(false);
+}
+
+bool Segmented::IsChecked(int index) const
+{
+    const QAbstractButton* b = m_group->button(index);
+    return b != nullptr && b->isChecked();
+}
+
+void Segmented::SetChecked(int index, bool checked)
+{
+    if (QAbstractButton* b = m_group->button(index))
+    {
+        b->setChecked(checked);
+    }
+}
+
 void Segmented::SetAccent(const QColor& color)
 {
     setStyleSheet(QStringLiteral("QToolButton:checked { background: %1; border-color: %1;"

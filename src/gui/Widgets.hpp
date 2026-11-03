@@ -25,6 +25,11 @@ public:
     void SetAccent(const QColor& color);       // colour of the selected segment
     void SetToolTips(const QStringList& tips); // one per segment
 
+    // Independent toggles instead of one choice: use IsChecked() and SetChecked().
+    void SetIndependent();
+    bool IsChecked(int index) const;
+    void SetChecked(int index, bool checked); // does not emit IndexChanged()
+
 signals:
     void IndexChanged(int index); // by the user only
 
