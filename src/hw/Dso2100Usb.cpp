@@ -332,6 +332,7 @@ bool Dso2100Usb::Open()
     }
     m_handle    = h;
     m_interface = iface;
+    m_lastGain.reset();
 
     if (!SendConfig(kInitConfig) || !SendCommand(kEpControl, kCmdIdle))
     {
@@ -451,6 +452,43 @@ AcquireResult Dso2100Usb::Acquire(const Core::AcqSettings& s, Core::Frame& out,
     {
         ctrl |= kCtrlDivided;
     }
+    const double recordSec =
+        static_cast<double>(Core::kRecordLen) * divider / Core::kBaseSampleRateHz;
+
+    // The first record after a range or coupling change still holds samples taken with the old
+    // setting (seen on the hardware), so it is taken free-running and dropped.
+    const bool settle = m_lastGain != gain;
+    m_lastGain        = gain;
+    if (settle)
+    {
+        const AcquireResult r = CaptureRecord(cfg, kCtrlFreeRun | (ctrl & kCtrlDivided), false,
+                                              s.trig.mode, recordSec, abort);
+        if (r != AcquireResult::kOk)
+        {
+            m_lastGain.reset();
+            return r;
+        }
+    }
+    const AcquireResult r = CaptureRecord(cfg, ctrl, hwTrig, s.trig.mode, recordSec, abort);
+    if (r != AcquireResult::kOk)
+    {
+        return r;
+    }
+
+    const auto ch1 = m_rx.begin() + kCh1Offset;
+    const auto ch2 = m_rx.begin() + kCh2Offset;
+    out.raw[0].assign(ch1, ch1 + Core::kRecordLen);
+    out.raw[1].assign(ch2, ch2 + Core::kRecordLen);
+    out.sampleRateHz = Core::kBaseSampleRateHz / divider;
+    out.demo         = false;
+    out.hwTriggered  = hwTrig;
+    return AcquireResult::kOk;
+}
+
+AcquireResult Dso2100Usb::CaptureRecord(std::array<uint8_t, 8> cfg, uint8_t ctrl, bool hwTrig,
+                                        Core::TriggerMode mode, double recordSec,
+                                        const std::atomic<bool>& abort)
+{
     if (!SendCommand(kEpCapture, kCmdCapture) || !SendConfig(cfg))
     {
         return AcquireResult::kError;
@@ -462,8 +500,6 @@ AcquireResult Dso2100Usb::Acquire(const Core::AcqSettings& s, Core::Frame& out,
     }
 
     // Wait for a full buffer.
-    const double recordSec =
-        static_cast<double>(Core::kRecordLen) * divider / Core::kBaseSampleRateHz;
     const auto autoTimeout = std::chrono::duration_cast<Clock::duration>(
                                  std::chrono::duration<double>(recordSec * kAutoTimeoutRecords)) +
                              kAutoTimeoutExtra;
@@ -486,7 +522,7 @@ AcquireResult Dso2100Usb::Acquire(const Core::AcqSettings& s, Core::Frame& out,
             break;
         }
         const auto waited = Clock::now() - start;
-        if (hwTrig && s.trig.mode == Core::TriggerMode::kAuto && waited > autoTimeout)
+        if (hwTrig && mode == Core::TriggerMode::kAuto && waited > autoTimeout)
         {
             return AcquireResult::kTimeout;
         }
@@ -517,13 +553,6 @@ AcquireResult Dso2100Usb::Acquire(const Core::AcqSettings& s, Core::Frame& out,
         Fail("Short sample buffer (" + std::to_string(got) + " bytes)");
         return AcquireResult::kError;
     }
-    const auto ch1 = m_rx.begin() + kCh1Offset;
-    const auto ch2 = m_rx.begin() + kCh2Offset;
-    out.raw[0].assign(ch1, ch1 + Core::kRecordLen);
-    out.raw[1].assign(ch2, ch2 + Core::kRecordLen);
-    out.sampleRateHz = Core::kBaseSampleRateHz / divider;
-    out.demo         = false;
-    out.hwTriggered  = hwTrig;
     return AcquireResult::kOk;
 }
 

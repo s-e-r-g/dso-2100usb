@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -60,17 +61,25 @@ public:
     AcquireResult Acquire(const Core::AcqSettings& s, Core::Frame& out,
                           const std::atomic<bool>& abort) override;
 
-private:
-    bool BulkWrite(uint8_t ep, std::span<const uint8_t> data);
-    bool BulkRead(uint8_t ep, std::span<uint8_t> data, int& transferred);
-    bool SendCommand(uint8_t ep, uint8_t cmd);
-    bool SendConfig(const std::array<uint8_t, 8>& cfg);
-    bool Fail(std::string msg);
+    // The whole sample buffer of the last capture, as read from EP2 (for diagnostics).
+    std::span<const uint8_t> LastRawBuffer() const { return m_rx; }
 
-    libusb_context*       m_ctx       = nullptr;
-    libusb_device_handle* m_handle    = nullptr;
-    int                   m_interface = -1;
-    std::vector<uint8_t>  m_rx;
+private:
+    bool          BulkWrite(uint8_t ep, std::span<const uint8_t> data);
+    bool          BulkRead(uint8_t ep, std::span<uint8_t> data, int& transferred);
+    bool          SendCommand(uint8_t ep, uint8_t cmd);
+    bool          SendConfig(const std::array<uint8_t, 8>& cfg);
+    bool          Fail(std::string msg);
+    // One capture with the given config and arming byte; the samples end up in m_rx.
+    AcquireResult CaptureRecord(std::array<uint8_t, 8> cfg, uint8_t ctrl, bool hwTrig,
+                                Core::TriggerMode mode, double recordSec,
+                                const std::atomic<bool>& abort);
+
+    libusb_context*        m_ctx       = nullptr;
+    libusb_device_handle*  m_handle    = nullptr;
+    int                    m_interface = -1;
+    std::vector<uint8_t>   m_rx;
+    std::optional<uint8_t> m_lastGain; // gain byte of the last capture; none after Open()
 };
 
 // What the user has to do when the device with `pid` is present but cannot be opened.
