@@ -10,6 +10,18 @@ The app loads the scope's firmware itself, so the original 32-bit Windows driver
 are no longer needed. You only bind WinUSB once on Windows, or install a udev rule on Linux:
 **[docs/DRIVERS.md](docs/DRIVERS.md)**.
 
+### Quick start on Windows
+
+1. Unzip `dso2100scope-windows.zip` (from CI, or `make windows`).
+2. Plug in the scope; with [Zadig](https://zadig.akeo.ie) (Options > List All Devices) install
+   **WinUSB** for USB ID **0547 1006**.
+3. Start `dso2100scope.exe`: it uploads the firmware and the scope comes back as **0547 1002**.
+4. In Zadig install **WinUSB** for **0547 1002** ("EZ-USB Device"). The app shows
+   "DSO-2100 connected".
+
+Steps 2 and 4 are needed once per PC. Step-by-step details, what to expect and
+troubleshooting: [docs/DRIVERS.md](docs/DRIVERS.md).
+
 Requirements and status: [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md).
 Coding style: [CODING_STYLE.md](CODING_STYLE.md).
 
