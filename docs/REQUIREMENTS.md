@@ -39,7 +39,7 @@ The scope enumerates twice. The original software used two kernel drivers for th
 
 ## Scope functions
 
-- [x] Run / Stop / Single, Autoset, Default setup, trigger status (T'D / AUTO / WAIT / STOP).
+- [x] Run / Stop / Single, Autoset, Default setup, trigger status (TRIGGERED / AUTO / WAITING / STOPPED).
 - [x] Channels: on/off, V/div 50 mV..5 V (x probe), DC/AC/GND, probe x1/x10/x100, invert,
       position.
 - [x] Timebase 50 ns..1 s/div with automatic sample rate, horizontal delay (pan).
