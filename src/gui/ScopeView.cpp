@@ -196,6 +196,7 @@ void ScopeView::DrawTrace(QPainter& p, const App::Trace& t, double vdiv, double 
     if (pxPerSmp < 0.5)
     {
         // several samples per pixel: one min/max column per pixel
+        p.setRenderHint(QPainter::Antialiasing, false); // columns are pixel aligned anyway
         QPainterPath path;
         size_t       i     = 0;
         bool         first = true;
@@ -218,6 +219,7 @@ void ScopeView::DrawTrace(QPainter& p, const App::Trace& t, double vdiv, double 
             path.lineTo(col, yOf(lo));
         }
         p.drawPath(path);
+        p.setRenderHint(QPainter::Antialiasing, true);
         return;
     }
     if (m_state.dots)

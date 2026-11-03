@@ -103,7 +103,7 @@ private:
     void   ShowDriverProblem(const QString& hint);
     void   ZoomTime(int steps);
     void   ZoomVolts(int steps);
-    double MaxDelaySec() const;
+    double ClampDelay(double sec) const; // limits the delay to what the record can show
 
     void LoadSettings();
     void SaveSettings() const;

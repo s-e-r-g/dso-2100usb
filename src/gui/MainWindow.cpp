@@ -406,8 +406,7 @@ QWidget* MainWindow::BuildSidePanel()
     const auto shiftDelay = [this](double divs)
     {
         m_viewSettings.delaySec =
-            std::clamp(m_viewSettings.delaySec + divs * m_viewSettings.secPerDiv, -MaxDelaySec(),
-                       MaxDelaySec());
+            ClampDelay(m_viewSettings.delaySec + divs * m_viewSettings.secPerDiv);
         UpdateView();
     };
     connect(left, &QPushButton::clicked, this, [shiftDelay] { shiftDelay(1.0); });
@@ -759,20 +758,25 @@ void MainWindow::ConnectView()
             {
                 m_display.offsetDiv.at(static_cast<size_t>(c)) = std::round(div * 50) / 50;
                 m_selChannel                                   = c;
-                SyncUi();
+                m_syncing                                      = true;
+                m_ch.at(static_cast<size_t>(c))
+                    .offset->setValue(m_display.offsetDiv.at(static_cast<size_t>(c)));
+                m_syncing = false;
                 UpdateView();
             });
     connect(m_view, &ScopeView::TriggerLevelDragged, this,
             [this](double volts)
             {
                 m_viewSettings.trig.levelV = volts;
-                SyncUi();
+                m_syncing                  = true;
+                m_trigLevel->setValue(volts);
+                m_syncing = false;
                 UpdateView();
             });
     connect(m_view, &ScopeView::DelayDragged, this,
             [this](double sec)
             {
-                m_viewSettings.delaySec = std::clamp(sec, -MaxDelaySec(), MaxDelaySec());
+                m_viewSettings.delaySec = ClampDelay(sec);
                 UpdateView();
             });
     connect(m_view, &ScopeView::TimeZoom, this, &MainWindow::ZoomTime);
@@ -812,7 +816,13 @@ void MainWindow::ConnectAcquisition()
 
 void MainWindow::FillVdivCombo(size_t c)
 {
-    QComboBox* combo = m_ch.at(c).vdiv;
+    QComboBox*    combo = m_ch.at(c).vdiv;
+    const QString first =
+        Si(Core::kHwVoltsPerDiv.front() * m_acqSettings.ch.at(c).probe, "V", 3) + tr("/div");
+    if (combo->count() > 0 && combo->itemText(0) == first)
+    {
+        return; // same probe: the list is already right
+    }
     combo->clear();
     for (const double v : Core::kHwVoltsPerDiv)
     {
@@ -873,7 +883,7 @@ void MainWindow::ApplyAcq()
     m_viewSettings.secPerDiv = m_timeSteps.at(m_timeIndex);
     m_acqSettings.rateIndex  = Core::PickRateIndex(m_viewSettings.secPerDiv);
     m_acqSettings.trig       = m_viewSettings.trig;
-    m_viewSettings.delaySec  = std::clamp(m_viewSettings.delaySec, -MaxDelaySec(), MaxDelaySec());
+    m_viewSettings.delaySec  = ClampDelay(m_viewSettings.delaySec);
     m_acq->SetSettings(m_acqSettings);
     ++m_sentGen;
     m_proc.ResetAverage();
@@ -881,15 +891,21 @@ void MainWindow::ApplyAcq()
     UpdateView();
 }
 
-double MainWindow::MaxDelaySec() const
+double MainWindow::ClampDelay(double sec) const
 {
-    // stopped: the capture on screen sets the limit, not the rate the next one would use
-    const double fs =
-        !m_running && m_lastFrame
-            ? m_lastFrame->sampleRateHz
-            : Core::kBaseSampleRateHz / Core::kRateDividers.at(m_acqSettings.rateIndex);
+    if (!m_running && m_lastFrame && m_lastData)
+    {
+        // stopped: the screen centre may go anywhere in the held record
+        const double dt = m_lastFrame->Dt();
+        return std::clamp(sec, -m_lastData->triggerIndex * dt,
+                          (static_cast<double>(m_lastFrame->Len()) - m_lastData->triggerIndex) *
+                              dt);
+    }
+    const double fs = Core::kBaseSampleRateHz / Core::kRateDividers.at(m_acqSettings.rateIndex);
     const double recordSec = static_cast<double>(Core::kRecordLen) / fs;
-    return std::max(0.0, (recordSec - m_viewSettings.secPerDiv * Core::kHDivCount) / 2.0);
+    const double maxSec =
+        std::max(0.0, (recordSec - m_viewSettings.secPerDiv * Core::kHDivCount) / 2.0);
+    return std::clamp(sec, -maxSec, maxSec);
 }
 
 void MainWindow::UpdateView()
@@ -933,6 +949,10 @@ void MainWindow::RedrawStopped()
     App::ViewSettings v = m_viewSettings;
     v.trig.mode         = Core::TriggerMode::kAuto;
     v.averages          = 1;
+    if (m_lastData)
+    {
+        v.heldTriggerIndex = m_lastData->triggerIndex; // stay on the edge that was captured
+    }
     if (std::optional<App::DisplayData> d = m_proc.Process(*m_lastFrame, v))
     {
         m_view->SetData(*d);
@@ -951,9 +971,12 @@ void MainWindow::UpdateBadges()
                                       .arg(Si(s.VoltsPerDiv(), "V", 3))
                                       .arg(kCoupling.at(static_cast<size_t>(s.coupling)))
                                       .arg(s.invert ? tr("  inv") : QString()));
-        m_ch.at(c).badge->setEnabled(s.enabled);
-        m_ch.at(c).badge->setStyleSheet(
-            BadgeStyle(s.enabled ? Theme::kChannel.at(c) : QColor(0x60, 0x60, 0x60)));
+        if (m_ch.at(c).badge->isEnabled() != s.enabled)
+        {
+            m_ch.at(c).badge->setEnabled(s.enabled);
+            m_ch.at(c).badge->setStyleSheet(
+                BadgeStyle(s.enabled ? Theme::kChannel.at(c) : QColor(0x60, 0x60, 0x60)));
+        }
     }
     m_timeBadge->setText(
         tr("H  %1/div   Delay %2")
@@ -983,6 +1006,10 @@ void MainWindow::ResetStats()
 
 void MainWindow::SetTrigStatus(const QString& text, const QColor& color)
 {
+    if (m_trigStatus->text() == text)
+    {
+        return; // setStyleSheet re-polishes the widget: far too slow to run per frame
+    }
     m_trigStatus->setText(text);
     m_trigStatus->setStyleSheet(
         QStringLiteral("QLabel { color: black; background: %1; border-radius: 3px;"
@@ -995,7 +1022,10 @@ void MainWindow::SetRunning(bool running)
     m_running = running;
     m_view->SetWaiting(false);
     m_acq->SetRunning(running);
-    m_runBtn->setText(running ? tr("RUN") : tr("STOP"));
+    // Like the key on a bench scope: fixed label, the colour shows the state (green running, red
+    // stopped). Changing the text would read as the action the button performs.
+    m_runBtn->setToolTip(running ? tr("Running. Press to stop (Space)")
+                                 : tr("Stopped. Press to run (Space)"));
     m_runBtn->setStyleSheet(
         running ? QStringLiteral(
                       "QPushButton { background: #1d7a2c; color: white; font-weight: bold; }")
@@ -1022,7 +1052,6 @@ void MainWindow::OnFrame(const App::FramePtr& frame)
         return;
     }
 
-    m_lastFrame = frame;
     QElapsedTimer stageTimer;
     stageTimer.start();
     std::optional<App::DisplayData> d = m_proc.Process(*frame, m_viewSettings);
@@ -1034,6 +1063,10 @@ void MainWindow::OnFrame(const App::FramePtr& frame)
         ProfileFrame(*frame, processMs, 0);
         return;
     }
+    // Only a frame that reaches the screen may be held: after Stop, zoom and CSV must use what
+    // is shown, not a later capture without a trigger.
+    m_lastFrame = frame;
+    stageTimer.restart();
     if (d->triggered)
     {
         SetTrigStatus(tr("T'D"), QColor(0x40, 0xd0, 0x60));
@@ -1043,7 +1076,6 @@ void MainWindow::OnFrame(const App::FramePtr& frame)
         SetTrigStatus(tr("AUTO"), QColor(0xf0, 0xe0, 0x40));
     }
     m_view->SetWaiting(false);
-    stageTimer.restart();
     m_view->SetData(*d);
     UpdateMeasurements(*d);
     ProfileFrame(*frame, processMs, static_cast<double>(stageTimer.nsecsElapsed()) / 1e6);

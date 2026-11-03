@@ -92,10 +92,12 @@ if(DSO_TESTS AND NOT CMAKE_CROSSCOMPILING)
             tests/core/IntelHexTest.cpp
             tests/core/MeasureTest.cpp
             tests/core/TriggerTest.cpp
+            tests/app/ProcessorTest.cpp
+            src/app/Processor.cpp
         )
         target_compile_options(dso_tests PRIVATE ${DSO_WARNINGS})
         target_compile_definitions(dso_tests PRIVATE DSO_FIRMWARE_HEX="${CMAKE_SOURCE_DIR}/drivers/dso2100-firmware.hex")
-        target_link_libraries(dso_tests PRIVATE dso_core GTest::gtest_main)
+        target_link_libraries(dso_tests PRIVATE dso_core Qt6::Core GTest::gtest_main)
         include(GoogleTest)
         gtest_discover_tests(dso_tests)
     else()

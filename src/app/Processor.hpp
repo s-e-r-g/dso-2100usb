@@ -33,6 +33,9 @@ struct ViewSettings
     Core::FftWindow       fftWindow = Core::FftWindow::kHann;
     // Trigger as set now: the level is applied in software, so it need not restart a capture.
     Core::TriggerSettings trig;
+    // Stopped: keep this trigger position, so zooming stays on the same edge instead of searching
+    // the new window for another one.
+    std::optional<double> heldTriggerIndex;
 };
 
 // Samples placed on the screen: sample i is at x = x0Div + i * dxDiv (0..10 divisions).

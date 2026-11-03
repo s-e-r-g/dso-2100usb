@@ -37,8 +37,8 @@ std::optional<DisplayData> Processor::Process(const Core::Frame& f, const ViewSe
     d.demo         = f.demo;
 
     // ---------- trigger ----------
-    std::optional<double> trg;
-    if (v.trig.source != Core::TriggerSource::kExt)
+    std::optional<double> trg = v.heldTriggerIndex;
+    if (!trg && v.trig.source != Core::TriggerSource::kExt)
     {
         const auto                   src = static_cast<size_t>(v.trig.source);
         const Core::ChannelSettings& ch  = f.ch.at(src);
@@ -48,7 +48,7 @@ std::optional<DisplayData> Processor::Process(const Core::Frame& f, const ViewSe
         trg = Core::FindTrigger(f.volts.at(src), v.trig.levelV, v.trig.edge,
                                 ch.VoltsPerDiv() * kTriggerHysteresisDiv, lo, hi);
     }
-    else if (f.hwTriggered)
+    else if (!trg && f.hwTriggered)
     {
         trg = std::max(0.0, -startFromTrg); // the hardware trigger point is not reported
     }
