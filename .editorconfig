@@ -1,0 +1,27 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{c,h,cpp,hpp}]
+indent_style = space
+indent_size = 4
+max_line_length = 100
+
+[*.md]
+trim_trailing_whitespace = false
+
+[{CMakeLists.txt,*.cmake,*.json,*.yml}]
+indent_style = space
+indent_size = 4
+
+# original vendor software and firmware: keep as shipped
+[{original-software,drivers}/**]
+insert_final_newline = unset
+trim_trailing_whitespace = unset
+indent_style = unset
+indent_size = unset
+end_of_line = unset
