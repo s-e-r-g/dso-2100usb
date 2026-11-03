@@ -1,0 +1,32 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            // In the devcontainer: Linux debug build, window via WSLg
+            "name": "Debug (devcontainer, Linux)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/linux-debug/dso2100scope",
+            "cwd": "${workspaceFolder}",
+            "environment": [{ "name": "DSO_USB_TRACE", "value": "0" }],
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "setupCommands": [{ "text": "-enable-pretty-printing", "ignoreFailures": true }],
+            "preLaunchTask": "build linux-debug"
+        },
+        {
+            // VS Code opened on Windows (not in the container), Qt MinGW kit installed,
+            // see README "Native Windows development"
+            "name": "Debug (Windows native)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/windows-native/dso2100scope.exe",
+            "cwd": "${workspaceFolder}",
+            "environment": [{ "name": "DSO_USB_TRACE", "value": "0" }],
+            "MIMode": "gdb",
+            "miDebuggerPath": "gdb.exe",
+            "setupCommands": [{ "text": "-enable-pretty-printing", "ignoreFailures": true }],
+            "preLaunchTask": "build windows-native"
+        }
+    ]
+}

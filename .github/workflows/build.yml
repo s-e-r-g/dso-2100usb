@@ -1,0 +1,39 @@
+# Builds both platforms in the devcontainer (the same image developers use):
+# format check, Linux build + unit tests, Windows cross build + zip. Artifacts: both builds.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build in devcontainer
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: make check
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: dso2100scope-windows
+          path: build/windows/dist/dso2100scope-windows.zip
+
+      - name: Upload Linux build
+        uses: actions/upload-artifact@v4
+        with:
+          name: dso2100scope-linux
+          path: build/linux/dso2100scope
+
+      - name: Upload smoke-test screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot
+          path: build/screenshot.png

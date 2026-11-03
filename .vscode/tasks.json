@@ -1,0 +1,26 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build linux-debug",
+            "type": "shell",
+            "command": "cmake --preset linux-debug && cmake --build --preset linux-debug",
+            "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "build windows-native",
+            "type": "shell",
+            "command": "cmake --preset windows-native && cmake --build --preset windows-native",
+            "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "build all (linux + windows zip)",
+            "type": "shell",
+            "command": "cmake --preset linux && cmake --build --preset linux && ctest --preset linux && cmake --preset windows && cmake --build --preset windows",
+            "group": { "kind": "build", "isDefault": true },
+            "problemMatcher": "$gcc"
+        }
+    ]
+}

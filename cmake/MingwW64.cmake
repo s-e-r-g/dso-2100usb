@@ -1,0 +1,16 @@
+# Cross toolchain: Linux host -> 64-bit Windows with MinGW-w64 (posix threads, as Qt needs).
+set(CMAKE_SYSTEM_NAME Windows)
+set(CMAKE_SYSTEM_PROCESSOR x86_64)
+set(CMAKE_C_COMPILER x86_64-w64-mingw32-gcc-posix)
+set(CMAKE_CXX_COMPILER x86_64-w64-mingw32-g++-posix)
+set(CMAKE_RC_COMPILER x86_64-w64-mingw32-windres)
+
+set(CMAKE_FIND_ROOT_PATH /usr/x86_64-w64-mingw32 $ENV{QT_WINDOWS} $ENV{LIBUSB_WINDOWS})
+set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
+set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+
+# Qt's moc/rcc/uic run on the host
+set(QT_HOST_PATH $ENV{QT_LINUX} CACHE PATH "")
+set(LIBUSB_ROOT $ENV{LIBUSB_WINDOWS} CACHE PATH "")
