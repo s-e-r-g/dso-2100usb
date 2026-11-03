@@ -7,6 +7,7 @@
 #include "app/Processor.hpp"
 #include "gui/ScopeView.hpp"
 
+#include <QElapsedTimer>
 #include <QMainWindow>
 
 #include <array>
@@ -85,6 +86,7 @@ private:
 
     // ---------- data ----------
     void OnFrame(const App::FramePtr& frame);
+    void ProfileFrame(const Core::Frame& f, double processMs, double uiMs); // DSO_PROFILE=<file>
     void AutosetStep(const Core::Frame& f);
     void UpdateMeasurements(const App::DisplayData& d);
     void AddMeasurement(int source, Core::MeasureKind kind);
@@ -121,6 +123,12 @@ private:
     int           m_selChannel  = 0; // target of Ctrl+wheel
     App::FramePtr m_lastFrame;
     std::optional<App::DisplayData>        m_lastData;
+    QString                                m_profilePath;
+    QElapsedTimer                          m_profTimer;
+    int                                    m_profCount = 0;
+    Core::FrameTiming                      m_profSum;
+    double                                 m_profProcessMs = 0;
+    double                                 m_profUiMs      = 0;
     std::vector<MeasItem>                  m_meas;
     std::array<std::optional<RefTrace>, 2> m_refs;
 

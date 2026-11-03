@@ -88,6 +88,8 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    std::printf("connected at %s\n", usb.UsbSpeed().c_str());
+
     Core::AcqSettings s;
     s.rateIndex = std::min(rate, Core::kRateDividers.size() - 1);
     for (Core::ChannelSettings& ch : s.ch)
@@ -108,6 +110,8 @@ int main(int argc, char* argv[])
             return 1;
         }
         std::printf("capture %d: buffer %zu bytes\n", i, usb.LastRawBuffer().size());
+        std::printf("  time: arm %.2f  wait %.2f  usb-read %.2f ms\n", f.timing.armMs,
+                    f.timing.waitMs, f.timing.readMs);
         Stats("CH1", f.raw[0]);
         Stats("CH2", f.raw[1]);
     }

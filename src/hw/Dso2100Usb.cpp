@@ -74,6 +74,8 @@ constexpr auto    kInitConfig =
     std::to_array<uint8_t>({0x03, 0xdd, 0x05, 0x00, 0x0f, 0x00, 0x00, 0xff});
 
 // sample buffer
+// Always read all of it: after a shorter read the firmware takes no new capture and sends the
+// old record again (tested on the hardware).
 constexpr size_t kReadLen   = 0xff80;
 constexpr size_t kCh1Offset = 0x0002;
 constexpr size_t kCh2Offset = 0x8002;
@@ -362,6 +364,21 @@ void Dso2100Usb::Close()
     m_interface = -1;
 }
 
+std::string Dso2100Usb::UsbSpeed() const
+{
+    if (m_handle == nullptr)
+    {
+        return "not open";
+    }
+    switch (libusb_get_device_speed(libusb_get_device(m_handle)))
+    {
+    case LIBUSB_SPEED_LOW:  return "low speed (1.5 Mbit/s)";
+    case LIBUSB_SPEED_FULL: return "full speed (12 Mbit/s)";
+    case LIBUSB_SPEED_HIGH: return "high speed (480 Mbit/s)";
+    default:                return "unknown";
+    }
+}
+
 bool Dso2100Usb::BulkWrite(uint8_t ep, std::span<const uint8_t> data)
 {
     int tr = 0;
@@ -482,6 +499,7 @@ AcquireResult Dso2100Usb::Acquire(const Core::AcqSettings& s, Core::Frame& out,
     out.sampleRateHz = Core::kBaseSampleRateHz / divider;
     out.demo         = false;
     out.hwTriggered  = hwTrig;
+    out.timing       = m_timing;
     return AcquireResult::kOk;
 }
 
@@ -489,6 +507,7 @@ AcquireResult Dso2100Usb::CaptureRecord(std::array<uint8_t, 8> cfg, uint8_t ctrl
                                         Core::TriggerMode mode, double recordSec,
                                         const std::atomic<bool>& abort)
 {
+    const auto armStart = Clock::now();
     if (!SendCommand(kEpCapture, kCmdCapture) || !SendConfig(cfg))
     {
         return AcquireResult::kError;
@@ -499,6 +518,7 @@ AcquireResult Dso2100Usb::CaptureRecord(std::array<uint8_t, 8> cfg, uint8_t ctrl
         return AcquireResult::kError;
     }
 
+    const auto waitStart   = Clock::now();
     // Wait for a full buffer.
     const auto autoTimeout = std::chrono::duration_cast<Clock::duration>(
                                  std::chrono::duration<double>(recordSec * kAutoTimeoutRecords)) +
@@ -537,7 +557,8 @@ AcquireResult Dso2100Usb::CaptureRecord(std::array<uint8_t, 8> cfg, uint8_t ctrl
         }
     }
 
-    cfg[4] = kCtrlIdle;
+    const auto readStart = Clock::now();
+    cfg[4]               = kCtrlIdle;
     if (!SendConfig(cfg) || !SendCommand(kEpSamples, kCmdReadBuffer))
     {
         return AcquireResult::kError;
@@ -553,6 +574,11 @@ AcquireResult Dso2100Usb::CaptureRecord(std::array<uint8_t, 8> cfg, uint8_t ctrl
         Fail("Short sample buffer (" + std::to_string(got) + " bytes)");
         return AcquireResult::kError;
     }
+    const auto Ms = [](Clock::duration d)
+    { return std::chrono::duration<double, std::milli>(d).count(); };
+    m_timing.armMs  = Ms(waitStart - armStart);
+    m_timing.waitMs = Ms(readStart - waitStart);
+    m_timing.readMs = Ms(Clock::now() - readStart);
     return AcquireResult::kOk;
 }
 

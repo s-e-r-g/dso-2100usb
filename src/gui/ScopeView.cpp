@@ -6,6 +6,7 @@
 #include "core/Format.hpp"
 #include "gui/Theme.hpp"
 
+#include <QElapsedTimer>
 #include <QGestureEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -481,6 +482,8 @@ void ScopeView::UpdatePersistence()
 
 void ScopeView::paintEvent(QPaintEvent* /*e*/)
 {
+    QElapsedTimer paintTimer;
+    paintTimer.start();
     QPainter p(this);
     p.fillRect(rect(), Theme::kBackground);
     const QRectF r = TimeRect();
@@ -547,6 +550,7 @@ void ScopeView::paintEvent(QPaintEvent* /*e*/)
         p.setPen(Theme::kText);
         p.drawText(r, Qt::AlignCenter, tr("Waiting for data..."));
     }
+    m_paintMs = static_cast<double>(paintTimer.nsecsElapsed()) / 1e6;
 }
 
 // ---------- interaction ----------

@@ -276,7 +276,10 @@ void Acquisition::run()
             f.settingsGen = gen;
             f.ch          = s.ch;
             f.trig        = s.trig;
+            QElapsedTimer convertTimer;
+            convertTimer.start();
             Core::ConvertToVolts(f);
+            f.timing.convertMs = static_cast<double>(convertTimer.nsecsElapsed()) / 1e6;
             ++m_framesInFlight;
             emit FrameReady(std::make_shared<const Core::Frame>(std::move(f)));
         }

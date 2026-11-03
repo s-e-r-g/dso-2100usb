@@ -61,6 +61,8 @@ public:
     AcquireResult Acquire(const Core::AcqSettings& s, Core::Frame& out,
                           const std::atomic<bool>& abort) override;
 
+    std::string UsbSpeed() const; // the speed the device is connected at, as text
+
     // The whole sample buffer of the last capture, as read from EP2 (for diagnostics).
     std::span<const uint8_t> LastRawBuffer() const { return m_rx; }
 
@@ -80,6 +82,7 @@ private:
     int                    m_interface = -1;
     std::vector<uint8_t>   m_rx;
     std::optional<uint8_t> m_lastGain; // gain byte of the last capture; none after Open()
+    Core::FrameTiming      m_timing;
 };
 
 // What the user has to do when the device with `pid` is present but cannot be opened.

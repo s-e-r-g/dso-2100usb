@@ -94,6 +94,15 @@ struct AcqSettings
     size_t                                     rateIndex = 6; // index into kRateDividers
 };
 
+// Where the time of one capture went, in milliseconds (DSO_PROFILE, dso2100diag).
+struct FrameTiming
+{
+    double armMs     = 0; // config and start commands
+    double waitMs    = 0; // status polling until the buffer is full
+    double readMs    = 0; // sample transfer over USB
+    double convertMs = 0; // raw to volts
+};
+
 // One capture. raw comes from the backend; volts has probe, inversion and calibration applied.
 struct Frame
 {
@@ -106,6 +115,7 @@ struct Frame
     TriggerSettings                                 trig;
     bool                                            demo        = false;
     bool                                            hwTriggered = false;
+    FrameTiming                                     timing;
 
     double Dt() const { return 1.0 / sampleRateHz; }
     size_t Len() const { return volts[0].size(); }

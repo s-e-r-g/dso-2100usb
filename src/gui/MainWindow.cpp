@@ -120,6 +120,11 @@ MainWindow::MainWindow(QByteArray firmwareHex, QWidget* parent)
     ConnectAcquisition();
 
     LoadSettings();
+    m_profilePath = qEnvironmentVariable("DSO_PROFILE");
+    if (!m_profilePath.isEmpty())
+    {
+        m_viewSettings.trig.mode = Core::TriggerMode::kAuto; // measure with frames on screen
+    }
     SyncUi();
     const bool firstRun = !QSettings().contains(QStringLiteral("ch1/vdiv"));
     ApplyAcq();
@@ -1017,12 +1022,16 @@ void MainWindow::OnFrame(const App::FramePtr& frame)
         return;
     }
 
-    m_lastFrame                       = frame;
+    m_lastFrame = frame;
+    QElapsedTimer stageTimer;
+    stageTimer.start();
     std::optional<App::DisplayData> d = m_proc.Process(*frame, m_viewSettings);
+    const double processMs            = static_cast<double>(stageTimer.nsecsElapsed()) / 1e6;
     if (!d)
     {
         SetTrigStatus(tr("WAIT"), QColor(0xff, 0xb0, 0x30));
         m_view->SetWaiting(true);
+        ProfileFrame(*frame, processMs, 0);
         return;
     }
     if (d->triggered)
@@ -1034,8 +1043,10 @@ void MainWindow::OnFrame(const App::FramePtr& frame)
         SetTrigStatus(tr("AUTO"), QColor(0xf0, 0xe0, 0x40));
     }
     m_view->SetWaiting(false);
+    stageTimer.restart();
     m_view->SetData(*d);
     UpdateMeasurements(*d);
+    ProfileFrame(*frame, processMs, static_cast<double>(stageTimer.nsecsElapsed()) / 1e6);
     m_lastData = std::move(d);
 
     if (m_single)
@@ -1043,6 +1054,50 @@ void MainWindow::OnFrame(const App::FramePtr& frame)
         m_single = false;
         SetRunning(false);
     }
+}
+
+void MainWindow::ProfileFrame(const Core::Frame& f, double processMs, double uiMs)
+{
+    if (m_profilePath.isEmpty())
+    {
+        return;
+    }
+    if (m_profCount == 0)
+    {
+        m_profTimer.start();
+    }
+    ++m_profCount;
+    m_profSum.armMs += f.timing.armMs;
+    m_profSum.waitMs += f.timing.waitMs;
+    m_profSum.readMs += f.timing.readMs;
+    m_profSum.convertMs += f.timing.convertMs;
+    m_profProcessMs += processMs;
+    m_profUiMs += uiMs;
+    constexpr qint64 kReportMs = 1000;
+    if (m_profTimer.elapsed() < kReportMs)
+    {
+        return;
+    }
+    QFile file(m_profilePath);
+    if (file.open(QIODevice::Append | QIODevice::Text))
+    {
+        const double n = m_profCount;
+        QTextStream(&file) << QStringLiteral("fps %1  arm %2  wait %3  usb-read %4  convert %5  "
+                                             "process %6  ui %7  paint %8 ms\n")
+                                  .arg(n * 1000.0 / static_cast<double>(m_profTimer.elapsed()), 0,
+                                       'f', 1)
+                                  .arg(m_profSum.armMs / n, 0, 'f', 2)
+                                  .arg(m_profSum.waitMs / n, 0, 'f', 2)
+                                  .arg(m_profSum.readMs / n, 0, 'f', 2)
+                                  .arg(m_profSum.convertMs / n, 0, 'f', 2)
+                                  .arg(m_profProcessMs / n, 0, 'f', 2)
+                                  .arg(m_profUiMs / n, 0, 'f', 2)
+                                  .arg(m_view->LastPaintMs(), 0, 'f', 2);
+    }
+    m_profCount     = 0;
+    m_profSum       = {};
+    m_profProcessMs = 0;
+    m_profUiMs      = 0;
 }
 
 void MainWindow::AutosetStep(const Core::Frame& f)

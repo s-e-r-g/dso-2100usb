@@ -74,6 +74,7 @@ public:
     // Normal/Single mode with no trigger lately: say so on screen, so a held trace does not
     // look like a frozen program.
     void             SetWaiting(bool waiting);
+    double           LastPaintMs() const { return m_paintMs; } // duration of the last repaint
     const ViewState& State() const { return m_state; }
 
     QSize sizeHint() const override { return {800, 640}; }
@@ -139,6 +140,7 @@ private:
     double  m_dragStartValue = 0;
     double  m_pinchAccum     = 1.0;
     bool    m_waiting        = false;
+    double  m_paintMs        = 0;
 };
 
 }
