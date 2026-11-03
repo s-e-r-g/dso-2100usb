@@ -966,6 +966,7 @@ void MainWindow::SetTrigStatus(const QString& text, const QColor& color)
 void MainWindow::SetRunning(bool running)
 {
     m_running = running;
+    m_view->SetWaiting(false);
     m_acq->SetRunning(running);
     m_runBtn->setText(running ? tr("RUN") : tr("STOP"));
     m_runBtn->setStyleSheet(
@@ -999,6 +1000,7 @@ void MainWindow::OnFrame(const App::FramePtr& frame)
     if (!d)
     {
         SetTrigStatus(tr("WAIT"), QColor(0xff, 0xb0, 0x30));
+        m_view->SetWaiting(true);
         return;
     }
     if (d->triggered)
@@ -1009,6 +1011,7 @@ void MainWindow::OnFrame(const App::FramePtr& frame)
     {
         SetTrigStatus(tr("AUTO"), QColor(0xf0, 0xe0, 0x40));
     }
+    m_view->SetWaiting(false);
     m_view->SetData(*d);
     UpdateMeasurements(*d);
     m_lastData = std::move(d);

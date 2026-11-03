@@ -76,6 +76,15 @@ void ScopeView::SetData(const App::DisplayData& d)
     update();
 }
 
+void ScopeView::SetWaiting(bool waiting)
+{
+    if (waiting != m_waiting)
+    {
+        m_waiting = waiting;
+        update();
+    }
+}
+
 void ScopeView::ClearPersistence()
 {
     if (!m_persist.isNull())
@@ -522,6 +531,13 @@ void ScopeView::paintEvent(QPaintEvent* /*e*/)
 
     DrawMarkers(p);
     DrawCursors(p);
+    if (m_waiting)
+    {
+        p.setPen(Theme::kTrigger);
+        p.drawText(TimeRect().adjusted(0, 6, 0, 0), Qt::AlignHCenter | Qt::AlignTop,
+                   tr("Waiting for trigger  (no edge at the trigger level; Auto mode shows the "
+                      "signal anyway)"));
+    }
     if (m_state.math == App::MathOp::kFft)
     {
         DrawSpectrum(p);

@@ -71,6 +71,9 @@ public:
     void             SetState(const ViewState& s);
     void             SetData(const App::DisplayData& d);
     void             ClearPersistence();
+    // Normal/Single mode with no trigger lately: say so on screen, so a held trace does not
+    // look like a frozen program.
+    void             SetWaiting(bool waiting);
     const ViewState& State() const { return m_state; }
 
     QSize sizeHint() const override { return {800, 640}; }
@@ -135,6 +138,7 @@ private:
     QPointF m_dragStart;
     double  m_dragStartValue = 0;
     double  m_pinchAccum     = 1.0;
+    bool    m_waiting        = false;
 };
 
 }
