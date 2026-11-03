@@ -878,7 +878,11 @@ void MainWindow::ApplyAcq()
 
 double MainWindow::MaxDelaySec() const
 {
-    const double fs = Core::kBaseSampleRateHz / Core::kRateDividers.at(m_acqSettings.rateIndex);
+    // stopped: the capture on screen sets the limit, not the rate the next one would use
+    const double fs =
+        !m_running && m_lastFrame
+            ? m_lastFrame->sampleRateHz
+            : Core::kBaseSampleRateHz / Core::kRateDividers.at(m_acqSettings.rateIndex);
     const double recordSec = static_cast<double>(Core::kRecordLen) / fs;
     return std::max(0.0, (recordSec - m_viewSettings.secPerDiv * Core::kHDivCount) / 2.0);
 }
@@ -911,6 +915,24 @@ void MainWindow::UpdateView()
     }
     m_view->SetState(m_display);
     UpdateBadges();
+    if (!m_running && m_lastFrame)
+    {
+        RedrawStopped();
+    }
+}
+
+void MainWindow::RedrawStopped()
+{
+    // Zoom and pan inside the held capture, like a bench scope. Auto: a window that no longer
+    // holds the trigger point still shows the samples instead of nothing.
+    App::ViewSettings v = m_viewSettings;
+    v.trig.mode         = Core::TriggerMode::kAuto;
+    v.averages          = 1;
+    if (std::optional<App::DisplayData> d = m_proc.Process(*m_lastFrame, v))
+    {
+        m_view->SetData(*d);
+        m_lastData = std::move(d);
+    }
 }
 
 void MainWindow::UpdateBadges()

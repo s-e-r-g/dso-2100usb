@@ -75,8 +75,9 @@ private:
     // ---------- model -> widgets / device ----------
     void SyncUi();
     void FillVdivCombo(size_t c);
-    void ApplyAcq();   // settings the device needs: restarts the capture
-    void UpdateView(); // display-only settings
+    void ApplyAcq();      // settings the device needs: restarts the capture
+    void UpdateView();    // display-only settings
+    void RedrawStopped(); // stopped: show the held capture with the current zoom and delay
     void UpdateBadges();
     void ResetStats();
     void SetRunning(bool running);
