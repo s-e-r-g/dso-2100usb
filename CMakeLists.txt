@@ -74,7 +74,12 @@ if(WIN32)
     include(cmake/DeployWindows.cmake)
 endif()
 
-install(TARGETS dso2100scope RUNTIME DESTINATION bin)
+# console diagnostic: raw captures without the GUI (tools/diag)
+add_executable(dso2100diag tools/diag/DsoDiag.cpp)
+target_compile_options(dso2100diag PRIVATE ${DSO_WARNINGS})
+target_link_libraries(dso2100diag PRIVATE dso_core)
+
+install(TARGETS dso2100scope dso2100diag RUNTIME DESTINATION bin)
 
 # ---------- tests ----------
 if(DSO_TESTS AND NOT CMAKE_CROSSCOMPILING)
