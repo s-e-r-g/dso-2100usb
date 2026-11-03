@@ -38,6 +38,17 @@ Without a display, run the Linux build with `QT_QPA_PLATFORM=offscreen` (demo mo
 - Protocol (from github.com/guntars-lemps/oscope2100, documented in `src/hw/Dso2100Usb.cpp`):
   config on EP4, capture EP3, status EP7, samples EP2 (0xff80 bytes, CH1 at +2, CH2 at +0x8002),
   50 MHz / divider, 7 ranges 50 mV..5 V/div (code skips 4), 256 counts = 8 div, zero ~0x7f.
+- Measured on hardware: connects at USB full speed (12 Mbit/s; the AN2131 has no high-speed
+  PHY). Reading the 64 KB buffer takes ~57 ms, so ~18 frames/s is the ceiling; slow timebases add
+  the record time (30000 samples / sample rate). App stages are < 1 ms plus paint (~10-30 ms, GUI
+  thread). `DSO_PROFILE=<file>` logs the stages per second; `dso2100diag` shows USB speed and timing.
+- Board (photos): Cypress AN2131QC, 50.000 MHz oscillator (Hosonic HO-15B), one National ADC1175-50
+  (8 bit, 50 MS/s max) and one 32 KB IS62LV256L-15T SRAM per channel, a QFP logic chip with its
+  marking removed. So 50 MS/s per channel is right; the "100MS/s" on the case is 2 x 50 MS/s
+  (or would need interleaving both ADCs on one channel, which no known command does).
+- The first record after a gain byte change holds old-range data: the driver drops it.
+- Reading less than the whole 0xff80 buffer does not work: reads get 2x faster, but the firmware
+  then takes no new capture and repeats the old record (identical data). Do not retry this.
 - No hardware offset and no known trigger-level byte (config byte 5 is always 0): position is
   display-only, trigger level is applied in software. Not yet verified on hardware: edge bit
   polarity, raw value direction (use Invert if upside down).
