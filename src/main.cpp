@@ -2,6 +2,7 @@
 
 #include "app/Acquisition.hpp"
 #include "gui/MainWindow.hpp"
+#include "gui/Theme.hpp"
 
 #include <QApplication>
 #include <QFile>
@@ -32,6 +33,7 @@ void ApplyDarkTheme(QApplication& app)
     p.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(0x70, 0x74, 0x7a));
     p.setColor(QPalette::Disabled, QPalette::WindowText, QColor(0x70, 0x74, 0x7a));
     app.setPalette(p);
+    app.setStyleSheet(Gui::Theme::StyleSheet());
 }
 
 }
@@ -64,6 +66,12 @@ int main(int argc, char* argv[])
     const QString shot = qEnvironmentVariable("DSO_SCREENSHOT");
     if (!shot.isEmpty())
     {
+        // DSO_SCREENSHOT_SIZE=<w>x<h>: check the layout at another window size
+        const QStringList size = qEnvironmentVariable("DSO_SCREENSHOT_SIZE").split(u'x');
+        if (size.size() == 2)
+        {
+            w.resize(size[0].toInt(), size[1].toInt());
+        }
         constexpr int kShotDelayMs = 3000;
         QTimer::singleShot(kShotDelayMs, &w,
                            [&w, shot] { QApplication::exit(w.grab().save(shot) ? 0 : 1); });

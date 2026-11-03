@@ -61,11 +61,19 @@ qt_add_executable(dso2100scope WIN32
     src/gui/MainWindow.hpp
     src/gui/ScopeView.cpp
     src/gui/ScopeView.hpp
+    src/gui/Theme.cpp
+    src/gui/Widgets.cpp
+    src/gui/Widgets.hpp
 )
 qt_add_resources(dso2100scope firmware
     PREFIX /firmware
     BASE drivers
     FILES drivers/dso2100-firmware.hex
+)
+qt_add_resources(dso2100scope icons
+    PREFIX /icons
+    BASE src/gui/icons
+    FILES src/gui/icons/arrow-down.png src/gui/icons/arrow-up.png
 )
 target_compile_definitions(dso2100scope PRIVATE DSO_VERSION="${PROJECT_VERSION}")
 target_compile_options(dso2100scope PRIVATE ${DSO_WARNINGS})

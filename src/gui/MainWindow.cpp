@@ -5,6 +5,7 @@
 
 #include "core/Format.hpp"
 #include "gui/Theme.hpp"
+#include "gui/Widgets.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -51,6 +52,7 @@ constexpr double kLevelStepDiv           = 0.04;
 constexpr double kLevelRangeDiv          = 5.0;
 constexpr int    kStatusMs               = 6000;
 constexpr int    kMeasRowsVisible        = 5;
+constexpr int    kMeasRowHeight          = 22;
 // autoset
 constexpr double kAutosetStartSecPerDiv  = 1e-3;
 constexpr double kAutosetFillDiv         = 3.6; // largest |V| may use this much of the 4 div
@@ -83,6 +85,20 @@ QComboBox* MakeCombo(const QStringList& items)
     return c;
 }
 
+// A top bar control with a small caption above it.
+QWidget* Captioned(const QString& caption, QWidget* control)
+{
+    auto* w = new QWidget;
+    auto* v = new QVBoxLayout(w);
+    v->setContentsMargins(0, 0, 0, 0);
+    v->setSpacing(1);
+    auto* label = new QLabel(caption);
+    label->setObjectName(QStringLiteral("caption"));
+    v->addWidget(label);
+    v->addWidget(control);
+    return w;
+}
+
 }
 
 MainWindow::MainWindow(QByteArray firmwareHex, QWidget* parent)
@@ -105,12 +121,13 @@ MainWindow::MainWindow(QByteArray firmwareHex, QWidget* parent)
 
     auto* dock = new QDockWidget(tr("Controls"), this);
     dock->setObjectName(QStringLiteral("controls"));
-    dock->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+    dock->setFeatures(QDockWidget::NoDockWidgetFeatures);
+    dock->setTitleBarWidget(new QWidget); // the height is better spent on the controls
     auto* scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
     scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scroll->setWidget(BuildSidePanel());
-    scroll->setMinimumWidth(290);
+    scroll->setMinimumWidth(300);
     dock->setWidget(scroll);
     addDockWidget(Qt::RightDockWidgetArea, dock);
 
@@ -221,25 +238,80 @@ void MainWindow::BuildToolbar()
     QToolBar* tb = addToolBar(tr("Main"));
     tb->setObjectName(QStringLiteral("main"));
     tb->setMovable(false);
-    tb->setIconSize(QSize(20, 20));
+    tb->setFloatable(false);
 
+    // what is pressed all the time, then the display tools, then status on the right
     m_runBtn = new QPushButton(tr("Run/Stop"));
-    m_runBtn->setMinimumSize(110, 34);
+    m_runBtn->setMinimumSize(96, 40);
+    m_runBtn->setFocusPolicy(Qt::NoFocus);
     connect(m_runBtn, &QPushButton::clicked, this, &MainWindow::RunStop);
     tb->addWidget(m_runBtn);
 
     auto* single = new QPushButton(tr("Single"));
-    single->setMinimumSize(80, 34);
+    single->setMinimumHeight(40);
+    single->setFocusPolicy(Qt::NoFocus);
+    single->setToolTip(tr("Capture one triggered frame, then stop (S)"));
     connect(single, &QPushButton::clicked, this, &MainWindow::Single);
     tb->addWidget(single);
 
     auto* autoBtn = new QPushButton(tr("Autoset"));
-    autoBtn->setMinimumSize(80, 34);
+    autoBtn->setMinimumHeight(40);
+    autoBtn->setFocusPolicy(Qt::NoFocus);
+    autoBtn->setToolTip(tr("Find the signal and set scale, time and trigger (A)"));
     connect(autoBtn, &QPushButton::clicked, this, &MainWindow::Autoset);
     tb->addWidget(autoBtn);
 
+    tb->addSeparator();
+
+    m_drawMode = new Segmented({tr("Vectors"), tr("Dots")});
+    m_drawMode->SetToolTips({tr("Join the samples with lines"), tr("Show the samples only")});
+    tb->addWidget(Captioned(tr("DRAW"), m_drawMode));
+    connect(m_drawMode, &Segmented::IndexChanged, this,
+            [this](int i)
+            {
+                m_display.dots = i == 1;
+                UpdateView();
+            });
+
+    m_persist = new Segmented({tr("Off"), tr("Short"), tr("Long"), QStringLiteral("∞")});
+    m_persist->SetToolTips({tr("No persistence"), tr("Old traces fade quickly"),
+                            tr("Old traces fade slowly"), tr("Keep every trace until Clear")});
+    tb->addWidget(Captioned(tr("PERSISTENCE"), m_persist));
+    connect(m_persist, &Segmented::IndexChanged, this,
+            [this](int i)
+            {
+                m_display.persistence = static_cast<Persistence>(i);
+                m_view->ClearPersistence();
+                UpdateView();
+            });
+
+    m_xy = new Segmented({QStringLiteral("YT"), QStringLiteral("XY")});
+    m_xy->SetToolTips({tr("Voltage over time"), tr("CH1 on X, CH2 on Y")});
+    tb->addWidget(Captioned(tr("VIEW"), m_xy));
+    connect(m_xy, &Segmented::IndexChanged, this,
+            [this](int i)
+            {
+                m_display.xy = i == 1;
+                UpdateView();
+            });
+
+    m_cursorMode =
+        new Segmented({tr("Off"), QStringLiteral("X"), QStringLiteral("Y"), QStringLiteral("XY")});
+    m_cursorMode->SetToolTips({tr("No cursors"), tr("Time cursors: read ΔX and 1/ΔX"),
+                               tr("Voltage cursors: read ΔY"), tr("Time and voltage cursors")});
+    tb->addWidget(Captioned(tr("CURSORS"), m_cursorMode));
+    connect(m_cursorMode, &Segmented::IndexChanged, this,
+            [this](int i)
+            {
+                m_display.cursorMode = static_cast<CursorMode>(i);
+                UpdateView();
+            });
+
+    tb->addSeparator();
+
     auto* clear = new QPushButton(tr("Clear"));
-    clear->setMinimumSize(70, 34);
+    clear->setFocusPolicy(Qt::NoFocus);
+    clear->setToolTip(tr("Clear persistence and statistics (C)"));
     connect(clear, &QPushButton::clicked, this,
             [this]
             {
@@ -248,21 +320,21 @@ void MainWindow::BuildToolbar()
             });
     tb->addWidget(clear);
 
-    tb->addSeparator();
-    tb->addAction(tr("Screenshot"), this, &MainWindow::SaveScreenshot);
-    tb->addAction(tr("Save CSV"), this, &MainWindow::SaveCsv);
-
     auto* spacer = new QWidget;
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     tb->addWidget(spacer);
 
     m_trigStatus = new QLabel;
     m_trigStatus->setMinimumWidth(60);
+    m_trigStatus->setFixedHeight(28);
     m_trigStatus->setAlignment(Qt::AlignCenter);
+    m_trigStatus->setToolTip(tr("T'D: triggered   AUTO: no trigger, showing the signal anyway\n"
+                                "WAIT: waiting for a trigger   STOP: stopped"));
     tb->addWidget(m_trigStatus);
+
     m_connLabel = new QLabel;
-    m_connLabel->setContentsMargins(12, 0, 8, 0);
-    tb->addWidget(m_connLabel);
+    m_connLabel->setContentsMargins(8, 0, 8, 0);
+    statusBar()->addPermanentWidget(m_connLabel);
 }
 
 QWidget* MainWindow::BuildChannelBox(size_t c)
@@ -270,29 +342,43 @@ QWidget* MainWindow::BuildChannelBox(size_t c)
     ChannelUi& ui = m_ch.at(c);
     ui.box        = new QGroupBox(tr("CH%1").arg(c + 1));
     ui.box->setCheckable(true);
-    ui.box->setStyleSheet(QStringLiteral("QGroupBox::title { color: %1; font-weight: bold; }")
-                              .arg(Theme::kChannel.at(c).name()));
+    ui.box->setStyleSheet(
+        QStringLiteral("QGroupBox::title { color: %1; }").arg(Theme::kChannel.at(c).name()));
     auto* form = new QFormLayout(ui.box);
+    form->setVerticalSpacing(5);
 
     ui.vdiv     = new QComboBox;
-    ui.coupling = MakeCombo({tr("DC"), tr("AC"), tr("GND")});
-    ui.probe    = MakeCombo({QStringLiteral("x1"), QStringLiteral("x10"), QStringLiteral("x100")});
-    ui.invert   = new QCheckBox(tr("Invert"));
-    ui.offset   = new QDoubleSpinBox;
+    ui.coupling = new Segmented({tr("DC"), tr("AC"), tr("GND")});
+    ui.probe = new Segmented({QStringLiteral("x1"), QStringLiteral("x10"), QStringLiteral("x100")});
+    ui.coupling->SetToolTips({tr("DC: the whole signal, including its average level"),
+                              tr("AC: removes the average level, shows only the changes"),
+                              tr("GND: shows the 0 V line")});
+    ui.coupling->SetAccent(Theme::kChannel.at(c));
+    ui.probe->SetAccent(Theme::kChannel.at(c));
+    const QString probeTip = tr("Must match the switch on the probe");
+    ui.probe->SetToolTips({probeTip, probeTip, probeTip});
+    ui.invert = new QCheckBox(tr("Inv"));
+    ui.invert->setToolTip(tr("Invert the trace"));
+    ui.offset = new QDoubleSpinBox;
     ui.offset->setRange(-kMaxOffsetDiv, kMaxOffsetDiv);
     ui.offset->setSingleStep(kOffsetStepDiv);
     ui.offset->setSuffix(tr(" div"));
+    ui.offset->setToolTip(tr("Position on screen; you can also drag the marker at the left edge"));
     auto* zero = new QPushButton(tr("0"));
-    zero->setFixedWidth(28);
+    zero->setFixedWidth(30);
+    zero->setToolTip(tr("Back to the centre"));
     auto* offRow = new QHBoxLayout;
     offRow->addWidget(ui.offset, 1);
     offRow->addWidget(zero);
+    offRow->addWidget(ui.invert);
 
+    ui.box->setToolTip(tr("Turn this channel on or off"));
+    ui.vdiv->setToolTip(tr("Volts per division. Ctrl+wheel on the screen changes it too.\n"
+                           "The signal must fit within 4 divisions above and below 0 V."));
     form->addRow(tr("Scale"), ui.vdiv);
-    form->addRow(tr("Coupling"), ui.coupling);
+    form->addRow(tr("Input"), ui.coupling);
     form->addRow(tr("Probe"), ui.probe);
     form->addRow(tr("Position"), offRow);
-    form->addRow(QString(), ui.invert);
 
     const auto ch = [this, c]() -> Core::ChannelSettings& { return m_acqSettings.ch.at(c); };
     connect(ui.box, &QGroupBox::toggled, this,
@@ -315,29 +401,23 @@ QWidget* MainWindow::BuildChannelBox(size_t c)
                     SyncUi();
                 }
             });
-    connect(ui.coupling, &QComboBox::currentIndexChanged, this,
+    connect(ui.coupling, &Segmented::IndexChanged, this,
             [this, ch](int i)
             {
-                if (!m_syncing && i >= 0)
-                {
-                    ch().coupling = static_cast<Core::Coupling>(i);
-                    ApplyAcq();
-                }
+                ch().coupling = static_cast<Core::Coupling>(i);
+                ApplyAcq();
             });
-    connect(ui.probe, &QComboBox::currentIndexChanged, this,
+    connect(ui.probe, &Segmented::IndexChanged, this,
             [this, ch, c](int i)
             {
-                if (!m_syncing && i >= 0)
+                const int old = ch().probe;
+                ch().probe    = Core::kProbeChoices.at(static_cast<size_t>(i));
+                if (m_viewSettings.trig.source == static_cast<Core::TriggerSource>(c))
                 {
-                    const int old = ch().probe;
-                    ch().probe    = Core::kProbeChoices.at(static_cast<size_t>(i));
-                    if (m_viewSettings.trig.source == static_cast<Core::TriggerSource>(c))
-                    {
-                        m_viewSettings.trig.levelV *= static_cast<double>(ch().probe) / old;
-                    }
-                    ApplyAcq();
-                    SyncUi();
+                    m_viewSettings.trig.levelV *= static_cast<double>(ch().probe) / old;
                 }
+                ApplyAcq();
+                SyncUi();
             });
     connect(ui.invert, &QCheckBox::toggled, this,
             [this, ch](bool on)
@@ -366,13 +446,15 @@ QWidget* MainWindow::BuildSidePanel()
 {
     auto* panel = new QWidget;
     auto* v     = new QVBoxLayout(panel);
+    v->setContentsMargins(6, 2, 6, 6);
     v->setSpacing(6);
     v->addWidget(BuildChannelBox(0));
     v->addWidget(BuildChannelBox(1));
 
     // horizontal
-    auto* hBox  = new QGroupBox(tr("Horizontal"));
-    auto* hf    = new QFormLayout(hBox);
+    auto* hBox = new QGroupBox(tr("Horizontal"));
+    auto* hf   = new QFormLayout(hBox);
+    hf->setVerticalSpacing(5);
     m_timeCombo = new QComboBox;
     for (const double s : m_timeSteps)
     {
@@ -386,11 +468,15 @@ QWidget* MainWindow::BuildSidePanel()
     {
         b->setFixedWidth(30);
     }
+    left->setToolTip(tr("Show later samples; or drag the screen"));
+    right->setToolTip(tr("Show earlier samples; or drag the screen"));
+    center->setToolTip(tr("Back to the trigger point; or double-click the screen"));
     auto* delayRow = new QHBoxLayout;
     delayRow->addWidget(m_delayLabel, 1);
     delayRow->addWidget(left);
     delayRow->addWidget(center);
     delayRow->addWidget(right);
+    m_timeCombo->setToolTip(tr("Time per division. The mouse wheel on the screen changes it too."));
     hf->addRow(tr("Scale"), m_timeCombo);
     hf->addRow(tr("Delay"), delayRow);
     v->addWidget(hBox);
@@ -420,17 +506,31 @@ QWidget* MainWindow::BuildSidePanel()
 
     // trigger
     auto* tBox = new QGroupBox(tr("Trigger"));
-    tBox->setStyleSheet(QStringLiteral("QGroupBox::title { color: %1; font-weight: bold; }")
-                            .arg(Theme::kTrigger.name()));
-    auto* tf     = new QFormLayout(tBox);
-    m_trigMode   = MakeCombo({tr("Auto"), tr("Normal"), tr("Single")});
-    m_trigSource = MakeCombo({tr("CH1"), tr("CH2"), tr("EXT")});
-    m_trigEdge   = MakeCombo({tr("Rising ↑"), tr("Falling ↓")});
-    m_trigLevel  = new QDoubleSpinBox;
+    tBox->setStyleSheet(
+        QStringLiteral("QGroupBox::title { color: %1; }").arg(Theme::kTrigger.name()));
+    auto* tf = new QFormLayout(tBox);
+    tf->setVerticalSpacing(5);
+    m_trigMode   = new Segmented({tr("Auto"), tr("Normal"), tr("Single")});
+    m_trigSource = new Segmented({tr("CH1"), tr("CH2"), tr("EXT")});
+    m_trigEdge   = new Segmented({tr("↑ Rising"), tr("↓ Falling")});
+    for (Segmented* s : {m_trigMode, m_trigSource, m_trigEdge})
+    {
+        s->SetAccent(Theme::kTrigger);
+    }
+    m_trigSource->SetToolTips({tr("Trigger on channel 1"), tr("Trigger on channel 2"),
+                               tr("Trigger on the EXT input (hardware trigger only)")});
+    m_trigEdge->SetToolTips({tr("Trigger when the signal goes up through the level"),
+                             tr("Trigger when the signal goes down through the level")});
+    m_trigMode->SetToolTips({tr("Show the signal even without a trigger"),
+                             tr("Update the screen only on a trigger"),
+                             tr("One triggered frame, then stop")});
+    m_trigLevel = new QDoubleSpinBox;
     m_trigLevel->setDecimals(kLevelDecimals);
     m_trigLevel->setSuffix(QStringLiteral(" V"));
+    m_trigLevel->setToolTip(tr("You can also drag the orange marker at the right edge"));
     auto* fifty = new QPushButton(tr("50%"));
-    fifty->setFixedWidth(44);
+    fifty->setFixedWidth(46);
+    fifty->setToolTip(tr("Set the level to the middle of the signal"));
     auto* levelRow = new QHBoxLayout;
     levelRow->addWidget(m_trigLevel, 1);
     levelRow->addWidget(fifty);
@@ -444,13 +544,9 @@ QWidget* MainWindow::BuildSidePanel()
     tf->addRow(tr("Level"), levelRow);
     tf->addRow(QString(), m_hwTrig);
     v->addWidget(tBox);
-    connect(m_trigMode, &QComboBox::currentIndexChanged, this,
+    connect(m_trigMode, &Segmented::IndexChanged, this,
             [this](int i)
             {
-                if (m_syncing || i < 0)
-                {
-                    return;
-                }
                 m_viewSettings.trig.mode = static_cast<Core::TriggerMode>(i);
                 if (m_viewSettings.trig.mode == Core::TriggerMode::kSingle)
                 {
@@ -461,24 +557,18 @@ QWidget* MainWindow::BuildSidePanel()
                     ApplyAcq();
                 }
             });
-    connect(m_trigSource, &QComboBox::currentIndexChanged, this,
+    connect(m_trigSource, &Segmented::IndexChanged, this,
             [this](int i)
             {
-                if (!m_syncing && i >= 0)
-                {
-                    m_viewSettings.trig.source = static_cast<Core::TriggerSource>(i);
-                    ApplyAcq();
-                    SyncUi();
-                }
+                m_viewSettings.trig.source = static_cast<Core::TriggerSource>(i);
+                ApplyAcq();
+                SyncUi();
             });
-    connect(m_trigEdge, &QComboBox::currentIndexChanged, this,
+    connect(m_trigEdge, &Segmented::IndexChanged, this,
             [this](int i)
             {
-                if (!m_syncing && i >= 0)
-                {
-                    m_viewSettings.trig.edge = static_cast<Core::TriggerEdge>(i);
-                    ApplyAcq();
-                }
+                m_viewSettings.trig.edge = static_cast<Core::TriggerEdge>(i);
+                ApplyAcq();
             });
     connect(m_trigLevel, &QDoubleSpinBox::valueChanged, this,
             [this](double lv)
@@ -516,22 +606,19 @@ QWidget* MainWindow::BuildSidePanel()
                 }
             });
 
-    // acquire + display
-    auto* aBox = new QGroupBox(tr("Acquire / Display"));
-    auto* af   = new QFormLayout(aBox);
+    // what is needed now and then: folded away, so the panel fits without scrolling
+    auto* acquire = new Section(tr("Acquire"), false);
+    auto* af      = new QFormLayout(acquire->Body());
+    af->setContentsMargins(6, 2, 2, 4);
     m_avgCombo = new QComboBox;
     for (const int n : kAverageChoices)
     {
         m_avgCombo->addItem(n == 1 ? tr("Normal") : tr("Average %1").arg(n));
     }
-    m_persist  = MakeCombo({tr("Off"), tr("Short"), tr("Long"), tr("Infinite")});
-    m_drawMode = MakeCombo({tr("Vectors"), tr("Dots")});
-    m_xy       = new QCheckBox(tr("XY mode (CH1 = X, CH2 = Y)"));
+    m_avgCombo->setToolTip(tr("Average several triggered frames to reduce noise.\n"
+                              "Needs a stable trigger; do not use it on digital buses."));
     af->addRow(tr("Mode"), m_avgCombo);
-    af->addRow(tr("Persistence"), m_persist);
-    af->addRow(tr("Draw"), m_drawMode);
-    af->addRow(QString(), m_xy);
-    v->addWidget(aBox);
+    v->addWidget(acquire);
     connect(m_avgCombo, &QComboBox::currentIndexChanged, this,
             [this](int i)
             {
@@ -541,54 +628,31 @@ QWidget* MainWindow::BuildSidePanel()
                     m_proc.ResetAverage();
                 }
             });
-    connect(m_persist, &QComboBox::currentIndexChanged, this,
-            [this](int i)
-            {
-                if (!m_syncing && i >= 0)
-                {
-                    m_display.persistence = static_cast<Persistence>(i);
-                    m_view->ClearPersistence();
-                    UpdateView();
-                }
-            });
-    connect(m_drawMode, &QComboBox::currentIndexChanged, this,
-            [this](int i)
-            {
-                if (!m_syncing)
-                {
-                    m_display.dots = i == 1;
-                    UpdateView();
-                }
-            });
-    connect(m_xy, &QCheckBox::toggled, this,
-            [this](bool on)
-            {
-                if (!m_syncing)
-                {
-                    m_display.xy = on;
-                    UpdateView();
-                }
-            });
 
-    // math
-    auto* mBox = new QGroupBox(tr("Math"));
-    mBox->setStyleSheet(QStringLiteral("QGroupBox::title { color: %1; font-weight: bold; }")
-                            .arg(Theme::kMath.name()));
-    auto* mf    = new QFormLayout(mBox);
-    m_mathOp    = MakeCombo({tr("Off"), tr("A + B"), tr("A − B"), tr("A × B"), tr("FFT (A)")});
-    m_mathA     = MakeCombo({tr("CH1"), tr("CH2")});
-    m_mathB     = MakeCombo({tr("CH1"), tr("CH2")});
+    auto* math = new Section(tr("Math"), false);
+    auto* mf   = new QFormLayout(math->Body());
+    mf->setContentsMargins(6, 2, 2, 4);
+    mf->setVerticalSpacing(5);
+    m_mathOp = MakeCombo({tr("Off"), tr("A + B"), tr("A − B"), tr("A × B"), tr("FFT (A)")});
+    m_mathA  = new Segmented({tr("CH1"), tr("CH2")});
+    m_mathB  = new Segmented({tr("CH1"), tr("CH2")});
+    m_mathA->SetAccent(Theme::kMath);
+    m_mathB->SetAccent(Theme::kMath);
     m_fftWindow = new QComboBox;
     for (int w = 0; w <= static_cast<int>(Core::FftWindow::kFlatTop); ++w)
     {
         m_fftWindow->addItem(
             QString::fromUtf8(Core::FftWindowName(static_cast<Core::FftWindow>(w))));
     }
+    m_mathOp->setToolTip(tr("Show a calculated trace in magenta, or the spectrum (FFT) below"));
+    m_mathA->SetToolTips({tr("First input: channel 1"), tr("First input: channel 2")});
+    m_mathB->SetToolTips({tr("Second input: channel 1"), tr("Second input: channel 2")});
+    m_fftWindow->setToolTip(tr("Hann suits most signals; Flat top reads amplitudes best"));
     mf->addRow(tr("Function"), m_mathOp);
     mf->addRow(tr("A"), m_mathA);
     mf->addRow(tr("B"), m_mathB);
-    mf->addRow(tr("FFT window"), m_fftWindow);
-    v->addWidget(mBox);
+    mf->addRow(tr("Window"), m_fftWindow);
+    v->addWidget(math);
     const auto mathChanged = [this]
     {
         if (m_syncing)
@@ -596,58 +660,49 @@ QWidget* MainWindow::BuildSidePanel()
             return;
         }
         m_viewSettings.math      = static_cast<App::MathOp>(m_mathOp->currentIndex());
-        m_viewSettings.mathA     = static_cast<size_t>(m_mathA->currentIndex());
-        m_viewSettings.mathB     = static_cast<size_t>(m_mathB->currentIndex());
+        m_viewSettings.mathA     = static_cast<size_t>(m_mathA->Index());
+        m_viewSettings.mathB     = static_cast<size_t>(m_mathB->Index());
         m_viewSettings.fftWindow = static_cast<Core::FftWindow>(m_fftWindow->currentIndex());
         UpdateView();
     };
-    for (QComboBox* c : {m_mathOp, m_mathA, m_mathB, m_fftWindow})
-    {
-        connect(c, &QComboBox::currentIndexChanged, this, mathChanged);
-    }
+    connect(m_mathOp, &QComboBox::currentIndexChanged, this, mathChanged);
+    connect(m_fftWindow, &QComboBox::currentIndexChanged, this, mathChanged);
+    connect(m_mathA, &Segmented::IndexChanged, this, mathChanged);
+    connect(m_mathB, &Segmented::IndexChanged, this, mathChanged);
 
-    // cursors
-    auto* cBox   = new QGroupBox(tr("Cursors"));
-    auto* cf     = new QFormLayout(cBox);
-    m_cursorMode = MakeCombo({tr("Off"), tr("Time (X)"), tr("Voltage (Y)"), tr("X and Y")});
-    m_cursorSrc  = MakeCombo({tr("CH1"), tr("CH2"), tr("Math")});
-    cf->addRow(tr("Mode"), m_cursorMode);
-    cf->addRow(tr("Source"), m_cursorSrc);
-    v->addWidget(cBox);
-    connect(m_cursorMode, &QComboBox::currentIndexChanged, this,
+    auto* cursors = new Section(tr("Cursors"), false);
+    auto* cf      = new QFormLayout(cursors->Body());
+    cf->setContentsMargins(6, 2, 2, 4);
+    m_cursorSrc = new Segmented({tr("CH1"), tr("CH2"), tr("Math")});
+    m_cursorSrc->SetToolTips({tr("Y cursors read volts of channel 1"),
+                              tr("Y cursors read volts of channel 2"),
+                              tr("Y cursors read the math trace")});
+    cf->addRow(tr("Y reads"), m_cursorSrc);
+    v->addWidget(cursors);
+    connect(m_cursorSrc, &Segmented::IndexChanged, this,
             [this](int i)
             {
-                if (!m_syncing)
-                {
-                    m_display.cursorMode = static_cast<CursorMode>(i);
-                    UpdateView();
-                }
-            });
-    connect(m_cursorSrc, &QComboBox::currentIndexChanged, this,
-            [this](int i)
-            {
-                if (!m_syncing)
-                {
-                    m_display.cursorSource = i;
-                    UpdateView();
-                }
+                m_display.cursorSource = i;
+                UpdateView();
             });
 
-    // references
-    auto* rBox = new QGroupBox(tr("Reference"));
-    auto* rg   = new QGridLayout(rBox);
+    auto* refs = new Section(tr("Reference"), false);
+    auto* rg   = new QGridLayout(refs->Body());
+    rg->setContentsMargins(6, 2, 2, 4);
     for (size_t i = 0; i < 2; ++i)
     {
-        auto* save      = new QPushButton(tr("CH%1 → R%1").arg(i + 1));
+        auto* save = new QPushButton(tr("CH%1 → R%1").arg(i + 1));
+        save->setToolTip(tr("Store the trace on screen as a reference to compare with"));
         m_refShow.at(i) = new QCheckBox(tr("Show R%1").arg(i + 1));
         m_refShow.at(i)->setEnabled(false);
+        m_refShow.at(i)->setToolTip(tr("Show or hide the stored reference"));
         m_refShow.at(i)->setStyleSheet(QStringLiteral("color: %1").arg(Theme::kRef.at(i).name()));
         rg->addWidget(save, static_cast<int>(i), 0);
         rg->addWidget(m_refShow.at(i), static_cast<int>(i), 1);
         connect(save, &QPushButton::clicked, this, [this, i] { SaveReference(i); });
         connect(m_refShow.at(i), &QCheckBox::toggled, this, [this](bool) { UpdateView(); });
     }
-    v->addWidget(rBox);
+    v->addWidget(refs);
     v->addStretch(1);
     return panel;
 }
@@ -678,10 +733,15 @@ QWidget* MainWindow::BuildBottom()
     badges->addWidget(m_rateBadge);
     v->addLayout(badges);
 
-    // measurements
+    // measurements: foldable, the trace gets the height back
+    auto* meas = new Section(tr("Measurements"), true);
+    auto* mv   = new QVBoxLayout(meas->Body());
+    mv->setContentsMargins(0, 0, 0, 0);
+    mv->setSpacing(4);
     auto* row = new QHBoxLayout;
     auto* add = new QToolButton;
-    add->setText(tr("Add measurement"));
+    add->setText(tr("Add measurement ▾"));
+    add->setObjectName(QStringLiteral("action"));
     add->setPopupMode(QToolButton::InstantPopup);
     auto* menu = new QMenu(add);
     for (int src = 0; src <= kMathSource; ++src)
@@ -699,18 +759,25 @@ QWidget* MainWindow::BuildBottom()
     m_stats     = new QCheckBox(tr("Statistics"));
     m_stats->setChecked(true);
     auto* reset = new QPushButton(tr("Reset statistics"));
+    add->setToolTip(tr("Choose a channel and a value to measure"));
+    clear->setToolTip(tr("Remove all measurements"));
+    m_stats->setToolTip(tr("Show mean, minimum and maximum"));
+    reset->setToolTip(tr("Start the statistics again"));
     row->addWidget(add);
     row->addWidget(clear);
     row->addSpacing(16);
     row->addWidget(m_stats);
     row->addWidget(reset);
     row->addStretch(1);
-    v->addLayout(row);
+    mv->addLayout(row);
 
     m_measTable = new QTableWidget(0, 6);
     m_measTable->setHorizontalHeaderLabels(
         {tr("Source"), tr("Measurement"), tr("Current"), tr("Mean"), tr("Min"), tr("Max")});
+    m_measTable->setToolTip(tr("Measured on what is on screen. Right-click a row to remove it."));
     m_measTable->verticalHeader()->setVisible(false);
+    m_measTable->verticalHeader()->setDefaultSectionSize(kMeasRowHeight);
+    m_measTable->setShowGrid(false);
     m_measTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     m_measTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
     m_measTable->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -721,7 +788,8 @@ QWidget* MainWindow::BuildBottom()
     auto* remove = new QAction(tr("Remove"), m_measTable);
     remove->setShortcut(QKeySequence::Delete);
     m_measTable->addAction(remove);
-    v->addWidget(m_measTable);
+    mv->addWidget(m_measTable);
+    v->addWidget(meas);
 
     connect(remove, &QAction::triggered, this,
             [this]
@@ -840,8 +908,8 @@ void MainWindow::SyncUi()
         ui.box->setChecked(s.enabled);
         FillVdivCombo(c);
         ui.vdiv->setCurrentIndex(static_cast<int>(s.vdivIndex));
-        ui.coupling->setCurrentIndex(static_cast<int>(s.coupling));
-        ui.probe->setCurrentIndex(static_cast<int>(std::distance(
+        ui.coupling->SetIndex(static_cast<int>(s.coupling));
+        ui.probe->SetIndex(static_cast<int>(std::distance(
             Core::kProbeChoices.begin(),
             std::find(Core::kProbeChoices.begin(), Core::kProbeChoices.end(), s.probe))));
         ui.invert->setChecked(s.invert);
@@ -850,9 +918,9 @@ void MainWindow::SyncUi()
     m_timeCombo->setCurrentIndex(static_cast<int>(m_timeIndex));
 
     const Core::TriggerSettings& t = m_viewSettings.trig;
-    m_trigMode->setCurrentIndex(static_cast<int>(t.mode));
-    m_trigSource->setCurrentIndex(static_cast<int>(t.source));
-    m_trigEdge->setCurrentIndex(static_cast<int>(t.edge));
+    m_trigMode->SetIndex(static_cast<int>(t.mode));
+    m_trigSource->SetIndex(static_cast<int>(t.source));
+    m_trigEdge->SetIndex(static_cast<int>(t.edge));
     const bool   ext = t.source == Core::TriggerSource::kExt;
     const double vdiv =
         ext ? 1.0 : m_acqSettings.ch.at(static_cast<size_t>(t.source)).VoltsPerDiv();
@@ -866,15 +934,15 @@ void MainWindow::SyncUi()
     m_avgCombo->setCurrentIndex(static_cast<int>(std::distance(
         kAverageChoices.begin(),
         std::find(kAverageChoices.begin(), kAverageChoices.end(), m_viewSettings.averages))));
-    m_persist->setCurrentIndex(static_cast<int>(m_display.persistence));
-    m_drawMode->setCurrentIndex(m_display.dots ? 1 : 0);
-    m_xy->setChecked(m_display.xy);
+    m_persist->SetIndex(static_cast<int>(m_display.persistence));
+    m_drawMode->SetIndex(m_display.dots ? 1 : 0);
+    m_xy->SetIndex(m_display.xy ? 1 : 0);
     m_mathOp->setCurrentIndex(static_cast<int>(m_viewSettings.math));
-    m_mathA->setCurrentIndex(static_cast<int>(m_viewSettings.mathA));
-    m_mathB->setCurrentIndex(static_cast<int>(m_viewSettings.mathB));
+    m_mathA->SetIndex(static_cast<int>(m_viewSettings.mathA));
+    m_mathB->SetIndex(static_cast<int>(m_viewSettings.mathB));
     m_fftWindow->setCurrentIndex(static_cast<int>(m_viewSettings.fftWindow));
-    m_cursorMode->setCurrentIndex(static_cast<int>(m_display.cursorMode));
-    m_cursorSrc->setCurrentIndex(m_display.cursorSource);
+    m_cursorMode->SetIndex(static_cast<int>(m_display.cursorMode));
+    m_cursorSrc->SetIndex(m_display.cursorSource);
     m_syncing = false;
 }
 

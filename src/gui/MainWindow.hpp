@@ -27,6 +27,8 @@ class QTableWidget;
 namespace Gui
 {
 
+class Segmented;
+
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -45,8 +47,8 @@ private:
     {
         QGroupBox*      box      = nullptr;
         QComboBox*      vdiv     = nullptr;
-        QComboBox*      coupling = nullptr;
-        QComboBox*      probe    = nullptr;
+        Segmented*      coupling = nullptr;
+        Segmented*      probe    = nullptr;
         QCheckBox*      invert   = nullptr;
         QDoubleSpinBox* offset   = nullptr;
         QLabel*         badge    = nullptr;
@@ -137,21 +139,21 @@ private:
     std::array<ChannelUi, 2>  m_ch;
     QComboBox*                m_timeCombo  = nullptr;
     QLabel*                   m_delayLabel = nullptr;
-    QComboBox*                m_trigMode   = nullptr;
-    QComboBox*                m_trigSource = nullptr;
-    QComboBox*                m_trigEdge   = nullptr;
+    Segmented*                m_trigMode   = nullptr;
+    Segmented*                m_trigSource = nullptr;
+    Segmented*                m_trigEdge   = nullptr;
     QDoubleSpinBox*           m_trigLevel  = nullptr;
     QCheckBox*                m_hwTrig     = nullptr;
     QComboBox*                m_avgCombo   = nullptr;
-    QComboBox*                m_persist    = nullptr;
-    QComboBox*                m_drawMode   = nullptr;
-    QCheckBox*                m_xy         = nullptr;
+    Segmented*                m_persist    = nullptr;
+    Segmented*                m_drawMode   = nullptr;
+    Segmented*                m_xy         = nullptr;
     QComboBox*                m_mathOp     = nullptr;
-    QComboBox*                m_mathA      = nullptr;
-    QComboBox*                m_mathB      = nullptr;
+    Segmented*                m_mathA      = nullptr;
+    Segmented*                m_mathB      = nullptr;
     QComboBox*                m_fftWindow  = nullptr;
-    QComboBox*                m_cursorMode = nullptr;
-    QComboBox*                m_cursorSrc  = nullptr;
+    Segmented*                m_cursorMode = nullptr;
+    Segmented*                m_cursorSrc  = nullptr;
     std::array<QCheckBox*, 2> m_refShow{};
     QTableWidget*             m_measTable  = nullptr;
     QCheckBox*                m_stats      = nullptr;

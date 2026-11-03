@@ -547,7 +547,7 @@ void ScopeView::paintEvent(QPaintEvent* /*e*/)
     {
         DrawSpectrum(p);
     }
-    if (!m_data)
+    if (!m_data && !m_waiting)
     {
         p.setPen(Theme::kText);
         p.drawText(r, Qt::AlignCenter, tr("Waiting for data..."));
