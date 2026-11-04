@@ -58,8 +58,11 @@ qt_add_executable(dso2100scope WIN32
     src/app/Acquisition.cpp
     src/app/Acquisition.hpp
     src/app/Processor.cpp
+    src/gui/Icons.cpp
     src/gui/MainWindow.cpp
     src/gui/MainWindow.hpp
+    src/gui/RecordBar.cpp
+    src/gui/RecordBar.hpp
     src/gui/ScopeView.cpp
     src/gui/ScopeView.hpp
     src/gui/Theme.cpp

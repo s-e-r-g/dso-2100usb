@@ -11,6 +11,13 @@
 namespace Gui
 {
 
+namespace
+{
+
+constexpr QSize kIconSize(20, 14);
+
+}
+
 Segmented::Segmented(const QStringList& labels, QWidget* parent)
     : QWidget(parent), m_group(new QButtonGroup(this))
 {
@@ -79,6 +86,19 @@ void Segmented::SetSegmentColor(int index, const QColor& color)
                                         " QToolButton:checked { background: %1; border-color: %1;"
                                         " color: black; }")
                              .arg(color.name()));
+    }
+}
+
+void Segmented::SetIcons(const QList<QIcon>& icons)
+{
+    for (int i = 0; i < icons.size(); ++i)
+    {
+        if (auto* b = qobject_cast<QToolButton*>(m_group->button(i)))
+        {
+            b->setIcon(icons.at(i));
+            b->setIconSize(kIconSize);
+            b->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        }
     }
 }
 

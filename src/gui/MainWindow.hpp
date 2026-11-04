@@ -28,6 +28,7 @@ class QTableWidget;
 namespace Gui
 {
 
+class RecordBar;
 class Section;
 class Segmented;
 
@@ -101,6 +102,8 @@ private:
 
     // ---------- actions ----------
     void   RunStop();
+    void   Run();
+    void   Stop();
     void   Single();
     void   Autoset();
     void   DefaultSetup();
@@ -141,7 +144,8 @@ private:
     std::array<std::optional<RefTrace>, 2> m_refs;
 
     // widgets
-    ScopeView*                m_view = nullptr;
+    ScopeView*                m_view      = nullptr;
+    RecordBar*                m_recordBar = nullptr;
     std::array<ChannelUi, 2>  m_ch;
     QComboBox*                m_timeCombo  = nullptr;
     QLabel*                   m_delayLabel = nullptr;
@@ -163,7 +167,7 @@ private:
     std::array<QCheckBox*, 2> m_refShow{};
     QTableWidget*             m_measTable   = nullptr;
     QCheckBox*                m_stats       = nullptr;
-    QPushButton*              m_runBtn      = nullptr;
+    Segmented*                m_acqState    = nullptr;
     QLabel*                   m_trigStatus  = nullptr;
     QLabel*                   m_connLabel   = nullptr;
     QLabel*                   m_timeBadge   = nullptr;

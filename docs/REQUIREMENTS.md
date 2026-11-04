@@ -48,7 +48,7 @@ The scope enumerates twice. The original software used two kernel drivers for th
       hardware trigger (always used for EXT).
 - [x] Acquire: normal, averaging 2..128.
 - [x] Display: vectors / dots, persistence (short, long, infinite), XY mode.
-- [x] Numbers on the grid: time from the trigger, volts of the last used channel.
+- [x] Numbers on the grid: time from the trigger, CH1 volts on the left, CH2 on the right.
 - [x] Math: A+B, A-B, AxB, FFT (rectangle, Hann, Hamming, Blackman, flat top) in a split pane.
 - [x] Measurements with statistics (mean/min/max): frequency, period, Vpp, Vmax, Vmin, Vamp,
       Vtop, Vbase, Vavg, Vrms, +/- width, duty, rise, fall, overshoot; per CH1/CH2/Math.
@@ -64,6 +64,7 @@ The scope enumerates twice. The original software used two kernel drivers for th
 - [x] Usability: short choices as one-click segmented buttons, display tools in the top bar,
       a panel that fits without scrolling, a short hint on every control, touch-sized controls.
 - [x] Zoom and pan inside a stopped capture.
+- [x] Record overview bar: the whole capture with the on-screen window, drag to move in time.
 - [ ] Measurements on a stopped capture and between the cursors (measurement gate).
 - [ ] Windows driver install from inside the app (libwdi, like Zadig, one UAC prompt) instead of
       the manual Zadig steps.

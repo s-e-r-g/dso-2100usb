@@ -55,9 +55,9 @@ struct ViewState
     int                   trigChannel     = 0; // -1: EXT (no level marker)
     bool                  dots            = false;
     bool                  xy              = false;
-    bool                  decodeOn        = false; // show the decoded bus row
-    bool                  gridLabels      = false; // numbers on the grid lines
-    int                   labelChannel    = 0;     // whose volts they show
+    bool                  decodeOn        = false;          // show the decoded bus row
+    bool                  gridTime        = false;          // time labels along the bottom
+    std::array<bool, 2>   gridVolts       = {false, false}; // volts: CH1 left, CH2 right
     Persistence           persistence     = Persistence::kOff;
     CursorMode            cursorMode      = CursorMode::kOff;
     int                   cursorSource    = 0; // channel the voltage cursors read, 2 = math
