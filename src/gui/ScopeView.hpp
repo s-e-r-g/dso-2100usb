@@ -79,6 +79,8 @@ public:
     void             SetWaiting(bool waiting);
     double           LastPaintMs() const { return m_paintMs; } // duration of the last repaint
     const ViewState& State() const { return m_state; }
+    double           LeftMargin() const; // from the widget edge to the plot; grows with the labels
+    double           RightMargin() const;
 
     QSize sizeHint() const override { return {800, 640}; }
     QSize minimumSizeHint() const override { return {320, 260}; }
@@ -126,8 +128,11 @@ private:
     void    DrawXy(QPainter& p, const QColor& c) const;
     void    DrawSpectrum(QPainter& p) const;
     void    DrawDecode(QPainter& p) const;
+    void    DrawGridTicks(QPainter& p) const;
     void    DrawGridLabels(QPainter& p) const;
     void    DrawMarkers(QPainter& p) const;
+    void    DrawDragValue(QPainter& p, const QString& text, const QColor& color, const QPointF& at,
+                          bool alignRight) const;
     void    DrawCursors(QPainter& p);
     void    UpdatePersistence();
     QString CursorText() const;

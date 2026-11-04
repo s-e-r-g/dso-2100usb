@@ -21,8 +21,8 @@ namespace
 
 constexpr int    kHeightPx     = 38;
 constexpr int    kMinWidthPx   = 200;
-constexpr double kMarginPx     = 24; // lines the bar up with the graticule of the scope view
-constexpr double kMinWindowPx  = 6;  // deep zoom: the window must stay visible and grabbable
+constexpr double kLabelBoxPx   = 56;
+constexpr double kMinWindowPx  = 6; // deep zoom: the window must stay visible and grabbable
 constexpr double kMarkerHalfPx = 4;
 constexpr int    kLabelFontPx  = 10;
 constexpr int    kWheelStep    = 120;
@@ -66,16 +66,26 @@ void RecordBar::SetCapture(const App::FramePtr& frame, const App::DisplayData& d
     update();
 }
 
+void RecordBar::SetMargins(double left, double right)
+{
+    if (left != m_marginLeft || right != m_marginRight)
+    {
+        m_marginLeft  = left;
+        m_marginRight = right;
+        update();
+    }
+}
+
 double RecordBar::IndexToX(double index) const
 {
     const double len = m_frame ? static_cast<double>(m_frame->Len()) : 1.0;
-    return kMarginPx + index / len * (width() - 2 * kMarginPx);
+    return m_marginLeft + index / len * (width() - m_marginLeft - m_marginRight);
 }
 
 double RecordBar::XToIndex(double x) const
 {
     const double len = m_frame ? static_cast<double>(m_frame->Len()) : 1.0;
-    return (x - kMarginPx) / (width() - 2 * kMarginPx) * len;
+    return (x - m_marginLeft) / (width() - m_marginLeft - m_marginRight) * len;
 }
 
 QRectF RecordBar::WindowRect() const
@@ -103,8 +113,8 @@ void RecordBar::DrawTrace(QPainter& p, size_t channel) const
     QColor c = Theme::kChannel.at(channel);
     c.setAlpha(kTraceAlpha);
     p.setPen(c);
-    const int x0 = static_cast<int>(kMarginPx);
-    const int x1 = width() - x0;
+    const int x0 = static_cast<int>(m_marginLeft);
+    const int x1 = width() - static_cast<int>(m_marginRight);
     for (int x = x0; x < x1; ++x)
     {
         const auto a = static_cast<size_t>(std::max(0.0, XToIndex(x)));
@@ -164,8 +174,8 @@ void RecordBar::paintEvent(QPaintEvent* /*e*/)
     const double  len    = static_cast<double>(m_frame->Len());
     const QString record = QString::fromStdString(Core::FormatSi(len * m_frame->Dt(), "s", 3));
     const QString zoom   = QStringLiteral("×%1").arg(len / m_screenLen, 0, 'f', 1);
-    p.drawText(QRectF(2, 0, kMarginPx * 2, height()), Qt::AlignLeft | Qt::AlignTop, record);
-    p.drawText(QRectF(width() - 2 * kMarginPx - 2, 0, kMarginPx * 2, height()),
+    p.drawText(QRectF(2, 0, kLabelBoxPx, height()), Qt::AlignLeft | Qt::AlignTop, record);
+    p.drawText(QRectF(width() - kLabelBoxPx - 2, 0, kLabelBoxPx, height()),
                Qt::AlignRight | Qt::AlignTop, zoom);
 }
 
