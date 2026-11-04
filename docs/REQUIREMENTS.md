@@ -64,6 +64,7 @@ The scope enumerates twice. The original software used two kernel drivers for th
 - [x] Usability: short choices as one-click segmented buttons, display tools in the top bar,
       a panel that fits without scrolling, a short hint on every control, touch-sized controls.
 - [x] Zoom and pan inside a stopped capture.
+- [x] Record overview bar: the whole capture with the on-screen window, drag to move in time.
 - [ ] Measurements on a stopped capture and between the cursors (measurement gate).
 - [ ] Windows driver install from inside the app (libwdi, like Zadig, one UAC prompt) instead of
       the manual Zadig steps.
