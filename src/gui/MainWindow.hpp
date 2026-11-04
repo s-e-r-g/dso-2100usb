@@ -28,6 +28,7 @@ class QTableWidget;
 namespace Gui
 {
 
+class RecordBar;
 class Section;
 class Segmented;
 
@@ -141,7 +142,8 @@ private:
     std::array<std::optional<RefTrace>, 2> m_refs;
 
     // widgets
-    ScopeView*                m_view = nullptr;
+    ScopeView*                m_view      = nullptr;
+    RecordBar*                m_recordBar = nullptr;
     std::array<ChannelUi, 2>  m_ch;
     QComboBox*                m_timeCombo  = nullptr;
     QLabel*                   m_delayLabel = nullptr;

@@ -4,6 +4,7 @@
 #include "gui/MainWindow.hpp"
 
 #include "core/Format.hpp"
+#include "gui/RecordBar.hpp"
 #include "gui/Theme.hpp"
 #include "gui/Widgets.hpp"
 
@@ -118,10 +119,12 @@ MainWindow::MainWindow(QByteArray firmwareHex, QWidget* parent)
                                                             kDefaultSecPerDiv * 0.999)));
 
     m_view        = new ScopeView;
+    m_recordBar   = new RecordBar;
     auto* central = new QWidget;
     auto* lay     = new QVBoxLayout(central);
     lay->setContentsMargins(4, 4, 4, 4);
     lay->setSpacing(4);
+    lay->addWidget(m_recordBar);
     lay->addWidget(m_view, 1);
     lay->addWidget(BuildBottom());
     setCentralWidget(central);
@@ -977,6 +980,13 @@ void MainWindow::ConnectView()
                 UpdateView();
             });
     connect(m_view, &ScopeView::TimeZoom, this, &MainWindow::ZoomTime);
+    connect(m_recordBar, &RecordBar::TimeZoom, this, &MainWindow::ZoomTime);
+    connect(m_recordBar, &RecordBar::DelayDragged, this,
+            [this](double sec)
+            {
+                m_viewSettings.delaySec = ClampDelay(sec);
+                UpdateView();
+            });
     connect(m_view, &ScopeView::VoltsZoom, this, &MainWindow::ZoomVolts);
 }
 
@@ -1148,6 +1158,7 @@ void MainWindow::UpdateView()
     // the last used channel, or the other one while that is off
     const auto last        = static_cast<size_t>(m_selChannel);
     m_display.labelChannel = m_acqSettings.ch.at(last).enabled ? m_selChannel : 1 - m_selChannel;
+    m_recordBar->setVisible(!m_display.xy); // XY has no time axis
     m_view->SetState(m_display);
     UpdateBadges();
     if (!m_running && m_lastFrame)
@@ -1170,6 +1181,7 @@ void MainWindow::RedrawStopped()
     if (std::optional<App::DisplayData> d = m_proc.Process(*m_lastFrame, v))
     {
         m_view->SetData(*d);
+        m_recordBar->SetCapture(m_lastFrame, *d, m_display);
         UpdateDecodeLog(*d);
         m_lastData = std::move(d);
     }
@@ -1287,6 +1299,7 @@ void MainWindow::OnFrame(const App::FramePtr& frame)
     }
     m_view->SetWaiting(false);
     m_view->SetData(*d);
+    m_recordBar->SetCapture(frame, *d, m_display);
     UpdateMeasurements(*d);
     UpdateDecodeLog(*d);
     ProfileFrame(*frame, processMs, static_cast<double>(stageTimer.nsecsElapsed()) / 1e6);
