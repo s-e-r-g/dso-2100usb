@@ -48,7 +48,7 @@ The scope enumerates twice. The original software used two kernel drivers for th
       hardware trigger (always used for EXT).
 - [x] Acquire: normal, averaging 2..128.
 - [x] Display: vectors / dots, persistence (short, long, infinite), XY mode.
-- [x] Numbers on the grid: time from the trigger, volts of the last used channel.
+- [x] Numbers on the grid: time from the trigger, CH1 volts on the left, CH2 on the right.
 - [x] Math: A+B, A-B, AxB, FFT (rectangle, Hann, Hamming, Blackman, flat top) in a split pane.
 - [x] Measurements with statistics (mean/min/max): frequency, period, Vpp, Vmax, Vmin, Vamp,
       Vtop, Vbase, Vavg, Vrms, +/- width, duty, rise, fall, overshoot; per CH1/CH2/Math.
