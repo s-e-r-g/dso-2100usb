@@ -1,0 +1,14 @@
+# LF line endings everywhere, in the repo and in the working tree,
+# regardless of core.autocrlf on the machine.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.inf text eol=crlf
+
+# Original vendor software and firmware: keep bytes exactly as shipped
+original-software/** -text
+drivers/**           -text
+
+*.png binary
+*.exe binary
+*.sys binary

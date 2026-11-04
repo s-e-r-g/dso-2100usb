@@ -1,0 +1,31 @@
+# The formatting rules of CODING_STYLE.md: what clang-format writes is the style.
+# Applies to our code (src/, tests/).
+# Version pinned: CLANG_FORMAT_VERSION in .devcontainer/Dockerfile (cmake --build --target format).
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: Latest
+IndentWidth: 4
+UseTab: Never
+ColumnLimit: 100
+BreakBeforeBraces: Allman
+NamespaceIndentation: None
+FixNamespaceComments: false
+AccessModifierOffset: -4
+IndentCaseLabels: false
+PointerAlignment: Left
+ReferenceAlignment: Left
+InsertBraces: true
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: true
+AlignConsecutiveShortCaseStatements: {Enabled: true}
+AllowShortFunctionsOnASingleLine: InlineOnly
+AllowShortBlocksOnASingleLine: Never
+AlignConsecutiveMacros: Consecutive
+AlignConsecutiveDeclarations: {Enabled: true, AcrossComments: true}
+AlignConsecutiveAssignments: {Enabled: true, AcrossComments: true}
+AlignTrailingComments: {Kind: Always, OverEmptyLines: 0}
+SpacesBeforeTrailingComments: 1
+SortIncludes: Never
+IncludeBlocks: Preserve
+ReflowComments: false

@@ -1,0 +1,43 @@
+{
+    "name": "DSO-2100 Scope",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    // USB for running the Linux build against the scope. On Windows attach the device to WSL
+    // first (both IDs, see docs/DRIVERS.md): usbipd attach --wsl --busid <id>
+    // GUI windows on the Windows desktop through WSLg (Docker Desktop, WSL2 backend), so the
+    // Linux build can be run and debugged (F5) from the container.
+    "runArgs": [
+        "--privileged",
+        "-v", "/dev/bus/usb:/dev/bus/usb",
+        "-v", "/run/desktop/mnt/host/wslg/.X11-unix:/tmp/.X11-unix",
+        "-v", "/run/desktop/mnt/host/wslg:/mnt/wslg"
+    ],
+    "containerEnv": {
+        "DISPLAY": ":0",
+        "WAYLAND_DISPLAY": "wayland-0",
+        "XDG_RUNTIME_DIR": "/mnt/wslg/runtime-dir",
+        "PULSE_SERVER": "/mnt/wslg/PulseServer"
+    },
+    // Windows bind mounts are owned by another uid: let git work on them.
+    "postCreateCommand": "git config --global --add safe.directory ${containerWorkspaceFolder}",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cmake-tools",
+                "editorconfig.editorconfig",
+                "xaver.clang-format"
+            ],
+            "settings": {
+                "cmake.useCMakePresets": "always",
+                "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+                "C_Cpp.formatting": "disabled",
+                "clang-format.executable": "/usr/local/bin/clang-format",
+                "[cpp]": {
+                    "editor.defaultFormatter": "xaver.clang-format"
+                }
+            }
+        }
+    }
+}
