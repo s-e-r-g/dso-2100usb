@@ -21,12 +21,14 @@ class QDoubleSpinBox;
 class QGroupBox;
 class QLabel;
 class QMessageBox;
+class QPlainTextEdit;
 class QPushButton;
 class QTableWidget;
 
 namespace Gui
 {
 
+class Section;
 class Segmented;
 
 class MainWindow : public QMainWindow
@@ -94,6 +96,7 @@ private:
     void ProfileFrame(const Core::Frame& f, double processMs, double uiMs); // DSO_PROFILE=<file>
     void AutosetStep(const Core::Frame& f);
     void UpdateMeasurements(const App::DisplayData& d);
+    void UpdateDecodeLog(const App::DisplayData& d);
     void AddMeasurement(int source, Core::MeasureKind kind);
 
     // ---------- actions ----------
@@ -158,16 +161,23 @@ private:
     Segmented*                m_cursorMode = nullptr;
     Segmented*                m_cursorSrc  = nullptr;
     std::array<QCheckBox*, 2> m_refShow{};
-    QTableWidget*             m_measTable  = nullptr;
-    QCheckBox*                m_stats      = nullptr;
-    QPushButton*              m_runBtn     = nullptr;
-    QLabel*                   m_trigStatus = nullptr;
-    QLabel*                   m_connLabel  = nullptr;
-    QLabel*                   m_timeBadge  = nullptr;
-    QLabel*                   m_trigBadge  = nullptr;
-    QLabel*                   m_rateBadge  = nullptr;
-    QAction*                  m_demoAction = nullptr;
-    QMessageBox*              m_driverBox  = nullptr;
+    QTableWidget*             m_measTable   = nullptr;
+    QCheckBox*                m_stats       = nullptr;
+    QPushButton*              m_runBtn      = nullptr;
+    QLabel*                   m_trigStatus  = nullptr;
+    QLabel*                   m_connLabel   = nullptr;
+    QLabel*                   m_timeBadge   = nullptr;
+    QLabel*                   m_trigBadge   = nullptr;
+    QLabel*                   m_rateBadge   = nullptr;
+    QAction*                  m_demoAction  = nullptr;
+    Segmented*                m_gridLabels  = nullptr;
+    Segmented*                m_decodeOn    = nullptr;
+    Segmented*                m_decodeScl   = nullptr;
+    QLabel*                   m_decodeFound = nullptr;
+    QCheckBox*                m_decodeStart = nullptr;
+    Section*                  m_logSection  = nullptr;
+    QPlainTextEdit*           m_decodeLog   = nullptr;
+    QMessageBox*              m_driverBox   = nullptr;
 };
 
 }

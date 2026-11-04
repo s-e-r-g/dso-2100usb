@@ -56,6 +56,7 @@ QToolButton[section="true"] { min-height: 26px; border: none; background: transp
                               color: #c4c9d0; font-weight: 600; text-align: left; }
 QToolButton[section="true"]:hover { color: white; }
 
+QPlainTextEdit { background: #17191d; border: 1px solid #30343b; border-radius: 4px; }
 QTableWidget { background: #17191d; border: 1px solid #30343b; border-radius: 4px; }
 QHeaderView::section { background: #1f2227; color: #8b929b; border: none; padding: 3px 6px;
                        font-size: 10px; font-weight: 600; }

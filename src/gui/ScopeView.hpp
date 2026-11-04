@@ -55,6 +55,9 @@ struct ViewState
     int                   trigChannel     = 0; // -1: EXT (no level marker)
     bool                  dots            = false;
     bool                  xy              = false;
+    bool                  decodeOn        = false; // show the decoded bus row
+    bool                  gridLabels      = false; // numbers on the grid lines
+    int                   labelChannel    = 0;     // whose volts they show
     Persistence           persistence     = Persistence::kOff;
     CursorMode            cursorMode      = CursorMode::kOff;
     int                   cursorSource    = 0; // channel the voltage cursors read, 2 = math
@@ -122,6 +125,8 @@ private:
                       const QColor& c) const;
     void    DrawXy(QPainter& p, const QColor& c) const;
     void    DrawSpectrum(QPainter& p) const;
+    void    DrawDecode(QPainter& p) const;
+    void    DrawGridLabels(QPainter& p) const;
     void    DrawMarkers(QPainter& p) const;
     void    DrawCursors(QPainter& p);
     void    UpdatePersistence();

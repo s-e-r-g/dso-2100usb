@@ -39,6 +39,7 @@ endif()
 add_library(dso_core STATIC
     src/core/Fft.cpp
     src/core/Format.cpp
+    src/core/I2c.cpp
     src/core/IntelHex.cpp
     src/core/Measure.cpp
     src/core/Scope.cpp
@@ -97,6 +98,7 @@ if(DSO_TESTS AND NOT CMAKE_CROSSCOMPILING)
         add_executable(dso_tests
             tests/core/FftTest.cpp
             tests/core/FormatTest.cpp
+            tests/core/I2cTest.cpp
             tests/core/IntelHexTest.cpp
             tests/core/MeasureTest.cpp
             tests/core/TriggerTest.cpp

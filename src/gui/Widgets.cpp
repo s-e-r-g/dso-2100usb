@@ -71,6 +71,17 @@ void Segmented::SetAccent(const QColor& color)
                       .arg(color.name()));
 }
 
+void Segmented::SetSegmentColor(int index, const QColor& color)
+{
+    if (QAbstractButton* b = m_group->button(index))
+    {
+        b->setStyleSheet(QStringLiteral("QToolButton { color: %1; }"
+                                        " QToolButton:checked { background: %1; border-color: %1;"
+                                        " color: black; }")
+                             .arg(color.name()));
+    }
+}
+
 void Segmented::SetToolTips(const QStringList& tips)
 {
     for (int i = 0; i < tips.size(); ++i)

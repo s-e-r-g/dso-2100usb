@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <numbers>
 #include <thread>
 
@@ -30,8 +31,48 @@ constexpr auto   kAdcOffsetCounts = std::to_array<double>({0.6, -0.8});
 
 }
 
-DemoBackend::DemoBackend() : m_rng(std::random_device{}())
+DemoBackend::DemoBackend()
+    : m_rng(std::random_device{}()), m_i2cBus(std::getenv("DSO_DEMO_I2C") != nullptr)
 {
+}
+
+double DemoBackend::I2cSignal(size_t channel, double t)
+{
+    // a 400 kHz write to 0x3C, like the KM board OLED, every 200 µs
+    constexpr double kBitSec    = 2.5e-6;
+    constexpr double kPeriodSec = 200e-6;
+    constexpr double kStartSec  = 10e-6;
+    constexpr double kBusV      = 3.3;
+    constexpr auto   kBytes     = std::to_array<uint8_t>({0x78, 0x00, 0xAE, 0x40});
+    constexpr int    kBitCount  = static_cast<int>(kBytes.size()) * 9;
+
+    const auto bitAt = [&](int k) // SDA during bit k: 8 data bits, then ACK (low)
+    {
+        const int pos = k % 9;
+        return pos < 8 && ((kBytes.at(static_cast<size_t>(k / 9)) >> (7 - pos)) & 1) != 0;
+    };
+    const double u  = (std::fmod(t, kPeriodSec) - kStartSec) / kBitSec;
+    bool         c  = true;
+    bool         dv = true;
+    if (u >= 0 && u < 1) // START: SDA falls while SCL is high
+    {
+        c  = u < 0.75;
+        dv = u < 0.25;
+    }
+    else if (u >= 1 && u < kBitCount + 1)
+    {
+        const int    k     = static_cast<int>(u) - 1;
+        const double phase = u - std::floor(u);
+        c                  = phase >= 0.5;
+        dv                 = phase < 0.1 && k > 0 ? bitAt(k - 1) : bitAt(k);
+    }
+    else if (u >= kBitCount + 1 && u < kBitCount + 2) // STOP: SDA rises while SCL is high
+    {
+        const double phase = u - std::floor(u);
+        c                  = phase >= 0.25;
+        dv                 = phase >= 0.75;
+    }
+    return (channel == 0 ? c : dv) ? kBusV : 0.0;
 }
 
 double DemoBackend::Signal(size_t channel, double t)
@@ -82,8 +123,8 @@ AcquireResult DemoBackend::Acquire(const Core::AcqSettings& s, Core::Frame& out,
         double                       mean   = 0;
         for (size_t i = 0; i < v.size(); ++i)
         {
-            v[i] = Signal(c, m_timeSec + static_cast<double>(i) / fs) / ch.probe +
-                   noise(m_rng) * hwVdiv;
+            const double t = m_timeSec + static_cast<double>(i) / fs;
+            v[i] = (m_i2cBus ? I2cSignal(c, t) : Signal(c, t)) / ch.probe + noise(m_rng) * hwVdiv;
             mean += v[i];
         }
         mean /= static_cast<double>(v.size());

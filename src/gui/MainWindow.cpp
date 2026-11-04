@@ -17,6 +17,7 @@
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileDialog>
+#include <QFontDatabase>
 #include <QFormLayout>
 #include <QFrame>
 #include <QGroupBox>
@@ -26,6 +27,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPlainTextEdit>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSettings>
@@ -54,6 +56,8 @@ constexpr double kLevelRangeDiv          = 5.0;
 constexpr int    kStatusMs               = 6000;
 constexpr int    kMeasRowsVisible        = 5;
 constexpr int    kMeasRowHeight          = 22;
+constexpr int    kDecodeLogHeight        = 72;
+constexpr double kMinDecodeRateHz        = 4e6; // 10 samples per bit at 400 kHz
 constexpr int    kChipScaleWidth         = 108;
 constexpr int    kChipCouplingWidth      = 60;
 // autoset
@@ -295,6 +299,18 @@ void MainWindow::BuildToolbar()
             [this](int i)
             {
                 m_display.xy = i == 1;
+                UpdateView();
+            });
+
+    m_gridLabels = new Segmented({tr("Labels")});
+    m_gridLabels->SetIndependent();
+    m_gridLabels->SetToolTips({tr("Numbers on the grid: time from the trigger along the bottom, "
+                                  "volts of the last used channel on the left")});
+    tb->addWidget(Captioned(tr("GRID"), m_gridLabels));
+    connect(m_gridLabels, &Segmented::IndexChanged, this,
+            [this]
+            {
+                m_display.gridLabels = m_gridLabels->IsChecked(0);
                 UpdateView();
             });
 
@@ -697,6 +713,44 @@ QWidget* MainWindow::BuildSidePanel()
                 UpdateView();
             });
 
+    auto* decode = new Section(tr("Bus decode"), false);
+    auto* df     = new QFormLayout(decode->Body());
+    df->setContentsMargins(6, 2, 2, 4);
+    df->setVerticalSpacing(5);
+    m_decodeOn    = new Segmented({tr("Off"), tr("I²C")});
+    m_decodeScl   = new Segmented({tr("Auto"), tr("CH1"), tr("CH2")});
+    m_decodeFound = new QLabel;
+    m_decodeScl->SetSegmentColor(1, Theme::kChannel[0]);
+    m_decodeScl->SetSegmentColor(2, Theme::kChannel[1]);
+    m_decodeStart = new QCheckBox(tr("Trigger on START"));
+    m_decodeOn->SetToolTips({tr("No decoding"), tr("Decode I²C: bytes appear at the bottom of the "
+                                                   "screen and in the log")});
+    m_decodeScl->SetToolTips({tr("Find out from the traffic which probe is SCL"),
+                              tr("SCL on CH1, SDA on CH2"), tr("SCL on CH2, SDA on CH1")});
+    m_decodeStart->setToolTip(tr("Show captures from the first START. Without a START in the "
+                                 "record, the bytes cannot be decoded."));
+    df->addRow(tr("Protocol"), m_decodeOn);
+    df->addRow(tr("SCL"), m_decodeScl);
+    df->addRow(QString(), m_decodeFound);
+    df->addRow(QString(), m_decodeStart);
+    v->addWidget(decode);
+    const auto decodeChanged = [this]
+    {
+        if (m_syncing)
+        {
+            return;
+        }
+        m_viewSettings.decode.enabled        = m_decodeOn->Index() == 1;
+        m_viewSettings.decode.autoDetect     = m_decodeScl->Index() == 0;
+        m_viewSettings.decode.sclChannel     = m_decodeScl->Index() == 2 ? 1 : 0;
+        m_viewSettings.decode.triggerOnStart = m_decodeStart->isChecked();
+        m_logSection->setVisible(m_viewSettings.decode.enabled);
+        UpdateView();
+    };
+    connect(m_decodeOn, &Segmented::IndexChanged, this, decodeChanged);
+    connect(m_decodeScl, &Segmented::IndexChanged, this, decodeChanged);
+    connect(m_decodeStart, &QCheckBox::toggled, this, decodeChanged);
+
     auto* refs = new Section(tr("Reference"), false);
     auto* rg   = new QGridLayout(refs->Body());
     rg->setContentsMargins(6, 2, 2, 4);
@@ -852,6 +906,20 @@ QWidget* MainWindow::BuildBottom()
     mv->addWidget(m_measTable);
     v->addWidget(meas);
 
+    m_logSection = new Section(tr("I²C log"), true);
+    auto* lv     = new QVBoxLayout(m_logSection->Body());
+    lv->setContentsMargins(0, 0, 0, 0);
+    m_decodeLog = new QPlainTextEdit;
+    m_decodeLog->setReadOnly(true);
+    m_decodeLog->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    m_decodeLog->setFixedHeight(kDecodeLogHeight);
+    m_decodeLog->setPlaceholderText(tr("No I²C transfer in this capture"));
+    m_decodeLog->setToolTip(tr("One line per transfer: time from the trigger, S = START, address "
+                               "with W or R,\nbytes in hex, A = ACK, N = NACK, P = STOP"));
+    lv->addWidget(m_decodeLog);
+    m_logSection->setVisible(false);
+    v->addWidget(m_logSection);
+
     connect(remove, &QAction::triggered, this,
             [this]
             {
@@ -1002,6 +1070,7 @@ void MainWindow::SyncUi()
     m_persist->SetIndex(static_cast<int>(m_display.persistence));
     m_drawMode->SetIndex(m_display.dots ? 1 : 0);
     m_xy->SetIndex(m_display.xy ? 1 : 0);
+    m_gridLabels->SetChecked(0, m_display.gridLabels);
     m_mathOp->setCurrentIndex(static_cast<int>(m_viewSettings.math));
     m_mathA->SetIndex(static_cast<int>(m_viewSettings.mathA));
     m_mathB->SetIndex(static_cast<int>(m_viewSettings.mathB));
@@ -1010,6 +1079,12 @@ void MainWindow::SyncUi()
     m_cursorMode->SetChecked(0, cursors == CursorMode::kTime || cursors == CursorMode::kBoth);
     m_cursorMode->SetChecked(1, cursors == CursorMode::kVoltage || cursors == CursorMode::kBoth);
     m_cursorSrc->SetIndex(m_display.cursorSource);
+    m_decodeOn->SetIndex(m_viewSettings.decode.enabled ? 1 : 0);
+    m_decodeScl->SetIndex(m_viewSettings.decode.autoDetect
+                              ? 0
+                              : static_cast<int>(m_viewSettings.decode.sclChannel) + 1);
+    m_decodeStart->setChecked(m_viewSettings.decode.triggerOnStart);
+    m_logSection->setVisible(m_viewSettings.decode.enabled);
     m_syncing = false;
 }
 
@@ -1069,6 +1144,10 @@ void MainWindow::UpdateView()
     {
         m_display.refs.at(i) = m_refShow.at(i)->isChecked() ? m_refs.at(i) : std::nullopt;
     }
+    m_display.decodeOn     = m_viewSettings.decode.enabled;
+    // the last used channel, or the other one while that is off
+    const auto last        = static_cast<size_t>(m_selChannel);
+    m_display.labelChannel = m_acqSettings.ch.at(last).enabled ? m_selChannel : 1 - m_selChannel;
     m_view->SetState(m_display);
     UpdateBadges();
     if (!m_running && m_lastFrame)
@@ -1091,6 +1170,7 @@ void MainWindow::RedrawStopped()
     if (std::optional<App::DisplayData> d = m_proc.Process(*m_lastFrame, v))
     {
         m_view->SetData(*d);
+        UpdateDecodeLog(*d);
         m_lastData = std::move(d);
     }
 }
@@ -1208,6 +1288,7 @@ void MainWindow::OnFrame(const App::FramePtr& frame)
     m_view->SetWaiting(false);
     m_view->SetData(*d);
     UpdateMeasurements(*d);
+    UpdateDecodeLog(*d);
     ProfileFrame(*frame, processMs, static_cast<double>(stageTimer.nsecsElapsed()) / 1e6);
     m_lastData = std::move(d);
 
@@ -1328,6 +1409,36 @@ void MainWindow::AutosetStep(const Core::Frame& f)
     ApplyAcq();
     SyncUi();
     statusBar()->showMessage(tr("Autoset done"), kStatusMs);
+}
+
+void MainWindow::UpdateDecodeLog(const App::DisplayData& d)
+{
+    if (!m_viewSettings.decode.enabled)
+    {
+        return;
+    }
+    const auto channel = [](size_t c)
+    {
+        return QStringLiteral("<span style=\"color:%1\">CH%2</span>")
+            .arg(Theme::kChannel.at(c).name())
+            .arg(c + 1);
+    };
+    m_decodeFound->setText(
+        tr("SCL = %1, SDA = %2").arg(channel(d.sclChannel), channel(1 - d.sclChannel)));
+    QString text;
+    if (d.sampleRateHz < kMinDecodeRateHz)
+    {
+        text = tr("The sample rate is too low to decode: use 100 µs/div or faster.");
+    }
+    else
+    {
+        text =
+            QString::fromStdString(Core::FormatI2cLog(d.i2c, 1.0 / d.sampleRateHz, d.triggerIndex));
+    }
+    if (text != m_decodeLog->toPlainText())
+    {
+        m_decodeLog->setPlainText(text);
+    }
 }
 
 void MainWindow::AddMeasurement(int source, Core::MeasureKind kind)
@@ -1624,8 +1735,9 @@ void MainWindow::LoadSettings()
             : 1;
     m_display.persistence = static_cast<Persistence>(
         std::clamp(s.value(QStringLiteral("display/persistence"), 0).toInt(), 0, 3));
-    m_display.dots = s.value(QStringLiteral("display/dots"), false).toBool();
-    m_display.xy   = s.value(QStringLiteral("display/xy"), false).toBool();
+    m_display.dots       = s.value(QStringLiteral("display/dots"), false).toBool();
+    m_display.xy         = s.value(QStringLiteral("display/xy"), false).toBool();
+    m_display.gridLabels = s.value(QStringLiteral("display/gridLabels"), false).toBool();
     m_viewSettings.math =
         static_cast<App::MathOp>(std::clamp(s.value(QStringLiteral("math/op"), 0).toInt(), 0, 4));
     m_viewSettings.mathA     = std::min(s.value(QStringLiteral("math/a"), 0).toUInt(), 1U);
@@ -1657,6 +1769,11 @@ void MainWindow::LoadSettings()
         }
     }
     m_stats->setChecked(s.value(QStringLiteral("statistics"), true).toBool());
+    m_viewSettings.decode.enabled    = s.value(QStringLiteral("decode/enabled"), false).toBool();
+    m_viewSettings.decode.autoDetect = s.value(QStringLiteral("decode/auto"), true).toBool();
+    m_viewSettings.decode.sclChannel =
+        std::min(s.value(QStringLiteral("decode/scl"), 0).toUInt(), 1U);
+    m_viewSettings.decode.triggerOnStart = s.value(QStringLiteral("decode/onStart"), true).toBool();
 }
 
 void MainWindow::SaveSettings() const
@@ -1694,6 +1811,7 @@ void MainWindow::SaveSettings() const
     s.setValue(QStringLiteral("display/persistence"), static_cast<int>(m_display.persistence));
     s.setValue(QStringLiteral("display/dots"), m_display.dots);
     s.setValue(QStringLiteral("display/xy"), m_display.xy);
+    s.setValue(QStringLiteral("display/gridLabels"), m_display.gridLabels);
     s.setValue(QStringLiteral("math/op"), static_cast<int>(m_viewSettings.math));
     s.setValue(QStringLiteral("math/a"), static_cast<uint>(m_viewSettings.mathA));
     s.setValue(QStringLiteral("math/b"), static_cast<uint>(m_viewSettings.mathB));
@@ -1708,6 +1826,10 @@ void MainWindow::SaveSettings() const
     }
     s.setValue(QStringLiteral("measurements"), meas);
     s.setValue(QStringLiteral("statistics"), m_stats->isChecked());
+    s.setValue(QStringLiteral("decode/enabled"), m_viewSettings.decode.enabled);
+    s.setValue(QStringLiteral("decode/auto"), m_viewSettings.decode.autoDetect);
+    s.setValue(QStringLiteral("decode/scl"), static_cast<uint>(m_viewSettings.decode.sclChannel));
+    s.setValue(QStringLiteral("decode/onStart"), m_viewSettings.decode.triggerOnStart);
 }
 
 }

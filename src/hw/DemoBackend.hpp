@@ -20,9 +20,11 @@ public:
 
 private:
     static double Signal(size_t channel, double t);
+    static double I2cSignal(size_t channel, double t); // SCL on CH1, SDA on CH2
 
     std::mt19937 m_rng;
     double       m_timeSec = 0.0;
+    bool         m_i2cBus  = false; // DSO_DEMO_I2C=1: simulate an I2C bus
 };
 
 }

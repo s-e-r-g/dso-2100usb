@@ -5,6 +5,7 @@
 
 #include "app/Acquisition.hpp"
 #include "core/Fft.hpp"
+#include "core/I2c.hpp"
 #include "core/Measure.hpp"
 
 #include <optional>
@@ -22,6 +23,14 @@ enum class MathOp : uint8_t
     kFft,
 };
 
+struct DecodeSettings
+{
+    bool   enabled        = false;
+    bool   autoDetect     = true; // find out which channel is SCL
+    size_t sclChannel     = 0;    // SDA is the other channel
+    bool   triggerOnStart = true;
+};
+
 struct ViewSettings
 {
     double                secPerDiv = 200e-6;
@@ -36,6 +45,7 @@ struct ViewSettings
     // Stopped: keep this trigger position, so zooming stays on the same edge instead of searching
     // the new window for another one.
     std::optional<double> heldTriggerIndex;
+    DecodeSettings        decode;
 };
 
 // Samples placed on the screen: sample i is at x = x0Div + i * dxDiv (0..10 divisions).
@@ -54,10 +64,14 @@ struct DisplayData
     bool                                   triggered    = false;
     bool                                   demo         = false;
     std::array<Trace, Core::kChannelCount> ch;
-    Trace                                  math;        // add/sub/mul
-    std::vector<float>                     spectrumDbv; // FFT
-    double                                 spectrumBinHz = 0;
-    double                                 triggerIndex  = 0; // in the frame, fractional
+    Trace                                  math; // add/sub/mul
+    std::vector<Core::I2cEvent>            i2c;
+    size_t                                 sclChannel = 0; // the channel decoded as SCL
+    double             screenStartIndex = 0; // sample at the left edge, to place the decoded events
+    double             samplesPerDiv    = 1;
+    std::vector<float> spectrumDbv; // FFT
+    double             spectrumBinHz = 0;
+    double             triggerIndex  = 0; // in the frame, fractional
     std::array<Core::MeasureValues, Core::kChannelCount> meas{};
     Core::MeasureValues                                  mathMeas{};
 };
@@ -77,6 +91,7 @@ private:
     uint64_t                                            m_avgGen       = 0;
     double                                              m_avgSecPerDiv = 0;
     double                                              m_avgDelay     = 0;
+    size_t m_detectedScl = 0; // kept while the bus is idle
 };
 
 }

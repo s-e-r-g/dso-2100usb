@@ -22,20 +22,29 @@ namespace Gui
 namespace
 {
 
-constexpr double kMarginLeft   = 24;
-constexpr double kMarginRight  = 24;
-constexpr double kMarginTop    = 14;
-constexpr double kMarginBottom = 8;
-constexpr double kFftGap       = 20;
-constexpr double kTimeShareFft = 0.56; // of the height when the FFT pane is shown
-constexpr double kGrabPx       = 8;
-constexpr double kTickDiv      = 0.2;
-constexpr double kTickPx       = 4;
-constexpr double kFftTopDbv    = 20;
-constexpr double kFftDbPerDiv  = 10;
-constexpr double kPinchStep    = 1.3;
-constexpr double kMaxOffsetDiv = 5;
-constexpr int    kWheelStep    = 120;
+constexpr double kMarginLeft     = 24;
+constexpr double kMarginRight    = 24;
+constexpr double kMarginTop      = 14;
+constexpr double kMarginBottom   = 8;
+constexpr double kFftGap         = 20;
+constexpr double kTimeShareFft   = 0.56; // of the height when the FFT pane is shown
+constexpr double kGrabPx         = 8;
+constexpr double kTickDiv        = 0.2;
+constexpr double kTickPx         = 4;
+constexpr double kFftTopDbv      = 20;
+constexpr double kFftDbPerDiv    = 10;
+constexpr double kPinchStep      = 1.3;
+constexpr double kMaxOffsetDiv   = 5;
+constexpr int    kWheelStep      = 120;
+constexpr int    kLabelFontPx    = 11;
+constexpr int    kLabelDarker    = 170; // percent: the traces stay the brightest
+constexpr int    kLabelDigits    = 3;
+constexpr double kLabelHeightPx  = 14;
+constexpr double kLabelGapPx     = 6;
+constexpr double kLabelZero      = 1e-12;
+constexpr double kDecodeBandPx   = 20;
+constexpr double kDecodeMarkerPx = 8;
+constexpr double kDecodeTagPx    = 32;
 
 // persistence: share of the old image kept per new frame
 constexpr auto kDecay = std::to_array<double>({0.0, 0.75, 0.93, 1.0});
@@ -257,6 +266,135 @@ void ScopeView::DrawXy(QPainter& p, const QColor& c) const
         const double y = DivToY(b.v[i] / m_state.voltsPerDiv[1] + m_state.offsetDiv[1]);
         p.drawPoint(QPointF(x, y));
     }
+}
+
+void ScopeView::DrawGridLabels(QPainter& p) const
+{
+    if (!m_state.gridLabels || m_state.xy)
+    {
+        return;
+    }
+    const QRectF r        = TimeRect();
+    const auto   signedSi = [](double v, const char* unit)
+    {
+        if (std::fabs(v) < kLabelZero)
+        {
+            return QStringLiteral("0");
+        }
+        return (v > 0 ? QStringLiteral("+") : QString()) +
+               QString::fromStdString(Core::FormatSi(v, unit, kLabelDigits));
+    };
+    p.save();
+    QFont f = font();
+    f.setPixelSize(kLabelFontPx);
+    p.setFont(f);
+    const QFontMetricsF fm(f);
+
+    // time from the trigger along the bottom, above the bus row when there is one
+    const double y = r.bottom() - kLabelHeightPx - (m_state.decodeOn ? kDecodeBandPx + 2 : 0);
+    p.setPen(Theme::kGridLabel);
+    double lastRight = r.left();
+    for (int i = 1; i <= Core::kHDivCount; ++i) // the corner belongs to the volts
+    {
+        const double  t    = (i - Core::kHDivCount / 2.0) * m_state.secPerDiv + m_state.delaySec;
+        const QString text = signedSi(t, "s");
+        const double  w    = fm.horizontalAdvance(text);
+        const double  x    = std::clamp(DivToX(i) - w / 2, r.left() + 2, r.right() - w - 2);
+        if (x < lastRight + kLabelGapPx)
+        {
+            continue; // narrow window: keep the labels readable, skip what does not fit
+        }
+        p.drawText(QPointF(x, y + fm.ascent()), text);
+        lastRight = x + w;
+    }
+
+    // volts of one channel on the left, at its position and scale
+    const auto c = static_cast<size_t>(m_state.labelChannel);
+    p.setPen(Theme::kChannel.at(c).darker(kLabelDarker));
+    for (int i = -Core::kVDivCount / 2; i <= Core::kVDivCount / 2; ++i)
+    {
+        const double v  = (i - m_state.offsetDiv.at(c)) * m_state.voltsPerDiv.at(c);
+        const double yy = std::max(DivToY(i) + fm.ascent() / 2, r.top() + fm.ascent() + 1);
+        if (yy < y) // the rows below hold the time labels and the bus
+        {
+            p.drawText(QPointF(r.left() + 3, yy), signedSi(v, "V"));
+        }
+    }
+    p.restore();
+}
+
+void ScopeView::DrawDecode(QPainter& p) const
+{
+    if (!m_state.decodeOn || !m_data || m_data->i2c.empty() || m_state.xy)
+    {
+        return;
+    }
+    const QRectF r = TimeRect();
+    const QRectF band(r.left() + 1, r.bottom() - kDecodeBandPx - 2, r.width() - 2, kDecodeBandPx);
+    const double pxPerSample = r.width() / Core::kHDivCount / m_data->samplesPerDiv;
+    const auto   xOf         = [&](size_t i)
+    { return r.left() + (static_cast<double>(i) - m_data->screenStartIndex) * pxPerSample; };
+    const auto hex = [](unsigned v)
+    { return QStringLiteral("%1").arg(v, 2, 16, QLatin1Char('0')).toUpper(); };
+
+    const QColor sdaColor = Theme::kChannel.at(Core::kChannelCount - 1 - m_data->sclChannel);
+
+    p.save();
+    p.setClipRect(band);
+    p.fillRect(band, QColor(0, 0, 0, 170));
+    for (const Core::I2cEvent& e : m_data->i2c)
+    {
+        const double x0 = xOf(e.begin);
+        const double x1 = xOf(e.end);
+        if (x1 < band.left() - kDecodeMarkerPx || x0 > band.right() + kDecodeMarkerPx)
+        {
+            continue;
+        }
+        if (e.kind == Core::I2cKind::kAddress || e.kind == Core::I2cKind::kData)
+        {
+            const bool   addr = e.kind == Core::I2cKind::kAddress;
+            const QRectF box(x0, band.top() + 1, x1 - x0, band.height() - 2);
+            // the border says which probe the bytes came from, the fill what they are
+            const QColor fill = !e.ack ? Theme::kDecodeNack
+                                : addr ? Theme::kDecodeAddress
+                                       : Theme::kDecodeData;
+            p.fillRect(box, fill);
+            p.setPen(sdaColor);
+            p.drawRect(box);
+            QString text = hex(e.value);
+            if (addr)
+            {
+                text += e.read ? QStringLiteral(" R") : QStringLiteral(" W");
+            }
+            if (!e.ack)
+            {
+                text += QStringLiteral(" NACK");
+            }
+            if (p.fontMetrics().horizontalAdvance(text) < box.width())
+            {
+                p.setPen(Qt::white);
+                p.drawText(box, Qt::AlignCenter, text);
+            }
+            continue;
+        }
+        const bool    stop = e.kind == Core::I2cKind::kStop;
+        const QString text = stop                              ? QStringLiteral("P")
+                             : e.kind == Core::I2cKind::kStart ? QStringLiteral("S")
+                                                               : QStringLiteral("Sr");
+        const QRectF  mark(x0 - kDecodeMarkerPx, band.top() + 1, 2 * kDecodeMarkerPx,
+                           band.height() - 2);
+        p.fillRect(mark, stop ? Theme::kDecodeStop : Theme::kDecodeStart);
+        p.setPen(Qt::black);
+        p.drawText(mark, Qt::AlignCenter, text);
+    }
+
+    // names the row, over the packets: the left margin belongs to the channel markers
+    const QRectF tag(band.left(), band.top(), kDecodeTagPx, band.height());
+    p.fillRect(tag, Theme::kBackground);
+    p.setPen(sdaColor);
+    p.drawRect(tag.adjusted(0, 0, -1, -1));
+    p.drawText(tag, Qt::AlignCenter, QStringLiteral("I²C"));
+    p.restore();
 }
 
 void ScopeView::DrawSpectrum(QPainter& p) const
@@ -535,6 +673,8 @@ void ScopeView::paintEvent(QPaintEvent* /*e*/)
     p.setRenderHint(QPainter::Antialiasing, false);
 
     DrawMarkers(p);
+    DrawGridLabels(p);
+    DrawDecode(p);
     DrawCursors(p);
     if (m_waiting)
     {

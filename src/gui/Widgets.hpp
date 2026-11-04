@@ -21,9 +21,10 @@ public:
     explicit Segmented(const QStringList& labels, QWidget* parent = nullptr);
 
     int  Index() const;
-    void SetIndex(int index);                  // does not emit IndexChanged()
-    void SetAccent(const QColor& color);       // colour of the selected segment
-    void SetToolTips(const QStringList& tips); // one per segment
+    void SetIndex(int index);                             // does not emit IndexChanged()
+    void SetAccent(const QColor& color);                  // colour of the selected segment
+    void SetToolTips(const QStringList& tips);            // one per segment
+    void SetSegmentColor(int index, const QColor& color); // for a segment named after a channel
 
     // Independent toggles instead of one choice: use IsChecked() and SetChecked().
     void SetIndependent();

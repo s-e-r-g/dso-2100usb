@@ -36,15 +36,39 @@ std::optional<DisplayData> Processor::Process(const Core::Frame& f, const ViewSe
     d.sampleRateHz = fs;
     d.demo         = f.demo;
 
+    // ---------- bus decode ----------
+    if (v.decode.enabled)
+    {
+        if (v.decode.autoDetect)
+        {
+            m_detectedScl = Core::DetectI2cClock(f.volts[0], f.volts[1]).value_or(m_detectedScl);
+        }
+        d.sclChannel = v.decode.autoDetect ? m_detectedScl : v.decode.sclChannel;
+        d.i2c        = Core::DecodeI2c(f.volts.at(d.sclChannel),
+                                       f.volts.at(Core::kChannelCount - 1 - d.sclChannel));
+    }
+
     // ---------- trigger ----------
+    const auto lo = static_cast<size_t>(std::max(1.0, -startFromTrg));
+    const auto hi = static_cast<size_t>(std::clamp(
+        static_cast<double>(n) - (startFromTrg + screenLen), 0.0, static_cast<double>(n)));
+
     std::optional<double> trg = v.heldTriggerIndex;
-    if (!trg && v.trig.source != Core::TriggerSource::kExt)
+    if (!trg && v.decode.enabled && v.decode.triggerOnStart)
+    {
+        // a START is the only place the decoder can sync on, and an edge cannot tell it from data
+        const auto start = std::find_if(
+            d.i2c.begin(), d.i2c.end(), [&](const Core::I2cEvent& e)
+            { return e.kind == Core::I2cKind::kStart && e.begin >= lo && e.begin < hi; });
+        if (start != d.i2c.end())
+        {
+            trg = static_cast<double>(start->begin);
+        }
+    }
+    else if (!trg && v.trig.source != Core::TriggerSource::kExt)
     {
         const auto                   src = static_cast<size_t>(v.trig.source);
         const Core::ChannelSettings& ch  = f.ch.at(src);
-        const auto                   lo  = static_cast<size_t>(std::max(1.0, -startFromTrg));
-        const auto                   hi  = static_cast<size_t>(std::clamp(
-            static_cast<double>(n) - (startFromTrg + screenLen), 0.0, static_cast<double>(n)));
         trg = Core::FindTrigger(f.volts.at(src), v.trig.levelV, v.trig.edge,
                                 ch.VoltsPerDiv() * kTriggerHysteresisDiv, lo, hi);
     }
@@ -63,6 +87,8 @@ std::optional<DisplayData> Processor::Process(const Core::Frame& f, const ViewSe
     }
     d.triggerIndex     = *trg;
     const double start = *trg + startFromTrg;
+    d.screenStartIndex = start;
+    d.samplesPerDiv    = perDiv;
 
     // ---------- visible window ----------
     const auto i0 =
