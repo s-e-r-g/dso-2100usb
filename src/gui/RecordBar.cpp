@@ -224,9 +224,13 @@ void RecordBar::mouseDoubleClickEvent(QMouseEvent* /*e*/)
 void RecordBar::wheelEvent(QWheelEvent* e)
 {
     const int steps = e->angleDelta().y() / kWheelStep;
-    if (steps != 0)
+    if (steps != 0 && m_frame)
     {
-        emit TimeZoom(-steps);
+        // zoom where the mouse points: the bar shows the whole record, so that is the intent
+        const double len   = static_cast<double>(m_frame->Len());
+        const double index = std::clamp(XToIndex(e->position().x()), 0.0, len);
+        emit         DelayDragged((index - m_triggerIndex) * m_frame->Dt());
+        emit         TimeZoom(-steps);
         e->accept();
     }
 }

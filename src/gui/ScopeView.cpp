@@ -270,7 +270,7 @@ void ScopeView::DrawXy(QPainter& p, const QColor& c) const
 
 void ScopeView::DrawGridLabels(QPainter& p) const
 {
-    if (!m_state.gridLabels || m_state.xy)
+    if ((!m_state.gridTime && !m_state.gridVolts[0] && !m_state.gridVolts[1]) || m_state.xy)
     {
         return;
     }
@@ -293,8 +293,9 @@ void ScopeView::DrawGridLabels(QPainter& p) const
     // time from the trigger along the bottom, above the bus row when there is one
     const double y = r.bottom() - kLabelHeightPx - (m_state.decodeOn ? kDecodeBandPx + 2 : 0);
     p.setPen(Theme::kGridLabel);
-    double lastRight = r.left();
-    for (int i = 1; i <= Core::kHDivCount; ++i) // the corner belongs to the volts
+    double    lastRight = r.left();
+    const int lastLabel = m_state.gridTime ? Core::kHDivCount : 0;
+    for (int i = 1; i <= lastLabel; ++i) // the corner belongs to the volts
     {
         const double  t    = (i - Core::kHDivCount / 2.0) * m_state.secPerDiv + m_state.delaySec;
         const QString text = signedSi(t, "s");
@@ -308,16 +309,24 @@ void ScopeView::DrawGridLabels(QPainter& p) const
         lastRight = x + w;
     }
 
-    // volts of one channel on the left, at its position and scale
-    const auto c = static_cast<size_t>(m_state.labelChannel);
-    p.setPen(Theme::kChannel.at(c).darker(kLabelDarker));
-    for (int i = -Core::kVDivCount / 2; i <= Core::kVDivCount / 2; ++i)
+    // volts at each channel's position and scale: CH1 on the left edge, CH2 on the right
+    for (size_t c = 0; c < m_state.chOn.size(); ++c)
     {
-        const double v  = (i - m_state.offsetDiv.at(c)) * m_state.voltsPerDiv.at(c);
-        const double yy = std::max(DivToY(i) + fm.ascent() / 2, r.top() + fm.ascent() + 1);
-        if (yy < y) // the rows below hold the time labels and the bus
+        if (!m_state.chOn.at(c) || !m_state.gridVolts.at(c))
         {
-            p.drawText(QPointF(r.left() + 3, yy), signedSi(v, "V"));
+            continue;
+        }
+        p.setPen(Theme::kChannel.at(c).darker(kLabelDarker));
+        for (int i = -Core::kVDivCount / 2; i <= Core::kVDivCount / 2; ++i)
+        {
+            const QString text =
+                signedSi((i - m_state.offsetDiv.at(c)) * m_state.voltsPerDiv.at(c), "V");
+            const double x  = c == 0 ? r.left() + 3 : r.right() - fm.horizontalAdvance(text) - 3;
+            const double yy = std::max(DivToY(i) + fm.ascent() / 2, r.top() + fm.ascent() + 1);
+            if (yy < y) // the rows below hold the time labels and the bus
+            {
+                p.drawText(QPointF(x, yy), text);
+            }
         }
     }
     p.restore();

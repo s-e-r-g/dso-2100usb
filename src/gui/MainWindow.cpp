@@ -4,6 +4,7 @@
 #include "gui/MainWindow.hpp"
 
 #include "core/Format.hpp"
+#include "gui/Icons.hpp"
 #include "gui/RecordBar.hpp"
 #include "gui/Theme.hpp"
 #include "gui/Widgets.hpp"
@@ -251,18 +252,31 @@ void MainWindow::BuildToolbar()
     tb->setFloatable(false);
 
     // what is pressed all the time, then the display tools, then status on the right
-    m_runBtn = new QPushButton(tr("Run/Stop"));
-    m_runBtn->setMinimumSize(96, 40);
-    m_runBtn->setFocusPolicy(Qt::NoFocus);
-    connect(m_runBtn, &QPushButton::clicked, this, &MainWindow::RunStop);
-    tb->addWidget(m_runBtn);
+    // one state, so exactly one is lit; Autoset is an action and stands apart
+    m_acqState = new Segmented({tr("Run"), tr("Single"), tr("Stop")});
+    m_acqState->SetToolTips({tr("Run: capture continuously (Space)"),
+                             tr("Single: capture one triggered frame, then stop (S)"),
+                             tr("Stop: hold the capture on screen (Space)")});
+    m_acqState->SetSegmentColor(0, Theme::kRunning);
+    m_acqState->SetSegmentColor(1, Theme::kArmed);
+    m_acqState->SetSegmentColor(2, Theme::kStopped);
+    m_acqState->SetIcons({MakeIcon(Glyph::kRun, Theme::kRunning, Qt::black),
+                          MakeIcon(Glyph::kSingle, Theme::kArmed, Qt::black),
+                          MakeIcon(Glyph::kStop, Theme::kStopped, Qt::black)});
+    m_acqState->setStyleSheet(QStringLiteral("QToolButton { min-height: 36px; min-width: 40px; }"));
+    tb->addWidget(m_acqState);
+    connect(m_acqState, &Segmented::IndexChanged, this,
+            [this](int i)
+            {
+                switch (i)
+                {
+                case 0:  Run(); break;
+                case 1:  Single(); break;
+                default: Stop(); break;
+                }
+            });
 
-    auto* single = new QPushButton(tr("Single"));
-    single->setMinimumHeight(40);
-    single->setFocusPolicy(Qt::NoFocus);
-    single->setToolTip(tr("Capture one triggered frame, then stop (S)"));
-    connect(single, &QPushButton::clicked, this, &MainWindow::Single);
-    tb->addWidget(single);
+    tb->addSeparator();
 
     auto* autoBtn = new QPushButton(tr("Autoset"));
     autoBtn->setMinimumHeight(40);
@@ -274,7 +288,10 @@ void MainWindow::BuildToolbar()
     tb->addSeparator();
 
     m_drawMode = new Segmented({tr("Vectors"), tr("Dots")});
-    m_drawMode->SetToolTips({tr("Join the samples with lines"), tr("Show the samples only")});
+    m_drawMode->SetToolTips(
+        {tr("Vectors: join the samples with lines"), tr("Dots: show the samples only")});
+    m_drawMode->SetIcons({MakeIcon(Glyph::kVectors, Theme::kText, Qt::white),
+                          MakeIcon(Glyph::kDots, Theme::kText, Qt::white)});
     tb->addWidget(Captioned(tr("DRAW"), m_drawMode));
     connect(m_drawMode, &Segmented::IndexChanged, this,
             [this](int i)
@@ -296,7 +313,9 @@ void MainWindow::BuildToolbar()
             });
 
     m_xy = new Segmented({QStringLiteral("YT"), QStringLiteral("XY")});
-    m_xy->SetToolTips({tr("Voltage over time"), tr("CH1 on X, CH2 on Y")});
+    m_xy->SetToolTips({tr("YT: voltage over time"), tr("XY: CH1 on X, CH2 on Y")});
+    m_xy->SetIcons({MakeIcon(Glyph::kTimeView, Theme::kText, Qt::white),
+                    MakeIcon(Glyph::kXyView, Theme::kText, Qt::white)});
     tb->addWidget(Captioned(tr("VIEW"), m_xy));
     connect(m_xy, &Segmented::IndexChanged, this,
             [this](int i)
@@ -305,22 +324,29 @@ void MainWindow::BuildToolbar()
                 UpdateView();
             });
 
-    m_gridLabels = new Segmented({tr("Labels")});
+    m_gridLabels = new Segmented({QStringLiteral("X"), tr("CH1"), tr("CH2")});
     m_gridLabels->SetIndependent();
-    m_gridLabels->SetToolTips({tr("Numbers on the grid: time from the trigger along the bottom, "
-                                  "volts of the last used channel on the left")});
+    m_gridLabels->SetSegmentColor(1, Theme::kChannel[0]);
+    m_gridLabels->SetSegmentColor(2, Theme::kChannel[1]);
+    m_gridLabels->SetToolTips({tr("Numbers on the grid: time from the trigger, along the bottom"),
+                               tr("Numbers on the grid: CH1 volts, on the left"),
+                               tr("Numbers on the grid: CH2 volts, on the right")});
     tb->addWidget(Captioned(tr("GRID"), m_gridLabels));
     connect(m_gridLabels, &Segmented::IndexChanged, this,
             [this]
             {
-                m_display.gridLabels = m_gridLabels->IsChecked(0);
+                m_display.gridTime     = m_gridLabels->IsChecked(0);
+                m_display.gridVolts[0] = m_gridLabels->IsChecked(1);
+                m_display.gridVolts[1] = m_gridLabels->IsChecked(2);
                 UpdateView();
             });
 
     m_cursorMode = new Segmented({QStringLiteral("X"), QStringLiteral("Y")});
     m_cursorMode->SetIndependent();
-    m_cursorMode->SetToolTips({tr("Time cursors: drag them, read ΔX and 1/ΔX on the screen"),
-                               tr("Voltage cursors: drag them, read ΔY on the screen")});
+    m_cursorMode->SetIcons({MakeIcon(Glyph::kCursorX, Theme::kText, Qt::white),
+                            MakeIcon(Glyph::kCursorY, Theme::kText, Qt::white)});
+    m_cursorMode->SetToolTips({tr("X: time cursors. Drag them, read ΔX and 1/ΔX on the screen"),
+                               tr("Y: voltage cursors. Drag them, read ΔY on the screen")});
     tb->addWidget(Captioned(tr("CURSORS"), m_cursorMode));
     connect(m_cursorMode, &Segmented::IndexChanged, this,
             [this]
@@ -540,20 +566,21 @@ QWidget* MainWindow::BuildSidePanel()
         QStringLiteral("QGroupBox::title { color: %1; }").arg(Theme::kTrigger.name()));
     auto* tf = new QFormLayout(tBox);
     tf->setVerticalSpacing(5);
-    m_trigMode   = new Segmented({tr("Auto"), tr("Normal"), tr("Single")});
+    m_trigMode   = new Segmented({tr("Auto"), tr("Normal")});
     m_trigSource = new Segmented({tr("CH1"), tr("CH2"), tr("EXT")});
-    m_trigEdge   = new Segmented({tr("↑ Rising"), tr("↓ Falling")});
+    m_trigEdge   = new Segmented({tr("Rising"), tr("Falling")});
+    m_trigEdge->SetIcons({MakeIcon(Glyph::kRising, Theme::kText, Qt::black),
+                          MakeIcon(Glyph::kFalling, Theme::kText, Qt::black)});
     for (Segmented* s : {m_trigMode, m_trigSource, m_trigEdge})
     {
         s->SetAccent(Theme::kTrigger);
     }
     m_trigSource->SetToolTips({tr("Trigger on channel 1"), tr("Trigger on channel 2"),
                                tr("Trigger on the EXT input (hardware trigger only)")});
-    m_trigEdge->SetToolTips({tr("Trigger when the signal goes up through the level"),
-                             tr("Trigger when the signal goes down through the level")});
-    m_trigMode->SetToolTips({tr("Show the signal even without a trigger"),
-                             tr("Update the screen only on a trigger"),
-                             tr("One triggered frame, then stop")});
+    m_trigEdge->SetToolTips({tr("Rising: trigger when the signal goes up through the level"),
+                             tr("Falling: trigger when the signal goes down through the level")});
+    m_trigMode->SetToolTips(
+        {tr("Show the signal even without a trigger"), tr("Update the screen only on a trigger")});
     m_trigLevel = new QDoubleSpinBox;
     m_trigLevel->setDecimals(kLevelDecimals);
     m_trigLevel->setSuffix(QStringLiteral(" V"));
@@ -578,14 +605,7 @@ QWidget* MainWindow::BuildSidePanel()
             [this](int i)
             {
                 m_viewSettings.trig.mode = static_cast<Core::TriggerMode>(i);
-                if (m_viewSettings.trig.mode == Core::TriggerMode::kSingle)
-                {
-                    Single();
-                }
-                else
-                {
-                    ApplyAcq();
-                }
+                ApplyAcq();
             });
     connect(m_trigSource, &Segmented::IndexChanged, this,
             [this](int i)
@@ -1080,7 +1100,9 @@ void MainWindow::SyncUi()
     m_persist->SetIndex(static_cast<int>(m_display.persistence));
     m_drawMode->SetIndex(m_display.dots ? 1 : 0);
     m_xy->SetIndex(m_display.xy ? 1 : 0);
-    m_gridLabels->SetChecked(0, m_display.gridLabels);
+    m_gridLabels->SetChecked(0, m_display.gridTime);
+    m_gridLabels->SetChecked(1, m_display.gridVolts[0]);
+    m_gridLabels->SetChecked(2, m_display.gridVolts[1]);
     m_mathOp->setCurrentIndex(static_cast<int>(m_viewSettings.math));
     m_mathA->SetIndex(static_cast<int>(m_viewSettings.mathA));
     m_mathB->SetIndex(static_cast<int>(m_viewSettings.mathB));
@@ -1103,7 +1125,11 @@ void MainWindow::ApplyAcq()
     m_viewSettings.secPerDiv = m_timeSteps.at(m_timeIndex);
     m_acqSettings.rateIndex  = Core::PickRateIndex(m_viewSettings.secPerDiv);
     m_acqSettings.trig       = m_viewSettings.trig;
-    m_viewSettings.delaySec  = ClampDelay(m_viewSettings.delaySec);
+    if (m_single)
+    {
+        m_acqSettings.trig.mode = Core::TriggerMode::kSingle;
+    }
+    m_viewSettings.delaySec = ClampDelay(m_viewSettings.delaySec);
     m_acq->SetSettings(m_acqSettings);
     ++m_sentGen;
     m_proc.ResetAverage();
@@ -1123,8 +1149,9 @@ double MainWindow::ClampDelay(double sec) const
     }
     const double fs = Core::kBaseSampleRateHz / Core::kRateDividers.at(m_acqSettings.rateIndex);
     const double recordSec = static_cast<double>(Core::kRecordLen) / fs;
+    // running: the trigger can be anywhere, often near the start, so allow the whole record
     const double maxSec =
-        std::max(0.0, (recordSec - m_viewSettings.secPerDiv * Core::kHDivCount) / 2.0);
+        std::max(0.0, recordSec - m_viewSettings.secPerDiv * Core::kHDivCount / 2.0);
     return std::clamp(sec, -maxSec, maxSec);
 }
 
@@ -1154,10 +1181,7 @@ void MainWindow::UpdateView()
     {
         m_display.refs.at(i) = m_refShow.at(i)->isChecked() ? m_refs.at(i) : std::nullopt;
     }
-    m_display.decodeOn     = m_viewSettings.decode.enabled;
-    // the last used channel, or the other one while that is off
-    const auto last        = static_cast<size_t>(m_selChannel);
-    m_display.labelChannel = m_acqSettings.ch.at(last).enabled ? m_selChannel : 1 - m_selChannel;
+    m_display.decodeOn = m_viewSettings.decode.enabled;
     m_recordBar->setVisible(!m_display.xy); // XY has no time axis
     m_view->SetState(m_display);
     UpdateBadges();
@@ -1244,15 +1268,7 @@ void MainWindow::SetRunning(bool running)
     m_running = running;
     m_view->SetWaiting(false);
     m_acq->SetRunning(running);
-    // Like the key on a bench scope: fixed label, the colour shows the state (green running, red
-    // stopped). Changing the text would read as the action the button performs.
-    m_runBtn->setToolTip(running ? tr("Running. Press to stop (Space)")
-                                 : tr("Stopped. Press to run (Space)"));
-    m_runBtn->setStyleSheet(
-        running ? QStringLiteral(
-                      "QPushButton { background: #1d7a2c; color: white; font-weight: bold; }")
-                : QStringLiteral(
-                      "QPushButton { background: #a51d1d; color: white; font-weight: bold; }"));
+    m_acqState->SetIndex(!running ? 2 : m_single ? 1 : 0);
     if (!running)
     {
         SetTrigStatus(tr("STOPPED"), QColor(0xe0, 0x40, 0x40));
@@ -1276,7 +1292,12 @@ void MainWindow::OnFrame(const App::FramePtr& frame)
 
     QElapsedTimer stageTimer;
     stageTimer.start();
-    std::optional<App::DisplayData> d = m_proc.Process(*frame, m_viewSettings);
+    App::ViewSettings v = m_viewSettings;
+    if (m_single)
+    {
+        v.trig.mode = Core::TriggerMode::kSingle; // waits for a trigger whatever the mode
+    }
+    std::optional<App::DisplayData> d = m_proc.Process(*frame, v);
     const double processMs            = static_cast<double>(stageTimer.nsecsElapsed()) / 1e6;
     if (!d)
     {
@@ -1511,19 +1532,32 @@ void MainWindow::UpdateMeasurements(const App::DisplayData& d)
 
 void MainWindow::RunStop()
 {
-    m_single = false;
-    if (m_viewSettings.trig.mode == Core::TriggerMode::kSingle && !m_running)
+    if (m_running)
     {
-        m_single = true;
+        Stop();
     }
-    SetRunning(!m_running);
+    else
+    {
+        Run();
+    }
+}
+
+void MainWindow::Run()
+{
+    m_single = false;
+    ApplyAcq();
+    SetRunning(true);
+}
+
+void MainWindow::Stop()
+{
+    m_single = false;
+    SetRunning(false);
 }
 
 void MainWindow::Single()
 {
-    m_viewSettings.trig.mode = Core::TriggerMode::kSingle;
-    m_single                 = true;
-    SyncUi();
+    m_single = true;
     ApplyAcq();
     SetRunning(true);
 }
@@ -1552,6 +1586,7 @@ void MainWindow::Autoset()
         std::distance(m_timeSteps.begin(), std::lower_bound(m_timeSteps.begin(), m_timeSteps.end(),
                                                             kAutosetStartSecPerDiv * 0.999)));
     m_autosetStep = 1;
+    m_single      = false;
     SyncUi();
     ApplyAcq();
     if (!m_running)
@@ -1567,6 +1602,7 @@ void MainWindow::DefaultSetup()
                                               m_acqSettings.ch[1].zeroCal};
     m_acqSettings                          = {};
     m_viewSettings                         = {};
+    m_single                               = false;
     m_display                              = {};
     for (size_t c = 0; c < 2; ++c)
     {
@@ -1748,9 +1784,12 @@ void MainWindow::LoadSettings()
             : 1;
     m_display.persistence = static_cast<Persistence>(
         std::clamp(s.value(QStringLiteral("display/persistence"), 0).toInt(), 0, 3));
-    m_display.dots       = s.value(QStringLiteral("display/dots"), false).toBool();
-    m_display.xy         = s.value(QStringLiteral("display/xy"), false).toBool();
-    m_display.gridLabels = s.value(QStringLiteral("display/gridLabels"), false).toBool();
+    m_display.dots         = s.value(QStringLiteral("display/dots"), false).toBool();
+    m_display.xy           = s.value(QStringLiteral("display/xy"), false).toBool();
+    const bool oldLabels   = s.value(QStringLiteral("display/gridLabels"), false).toBool();
+    m_display.gridTime     = s.value(QStringLiteral("display/gridTime"), oldLabels).toBool();
+    m_display.gridVolts[0] = s.value(QStringLiteral("display/gridCh1"), oldLabels).toBool();
+    m_display.gridVolts[1] = s.value(QStringLiteral("display/gridCh2"), oldLabels).toBool();
     m_viewSettings.math =
         static_cast<App::MathOp>(std::clamp(s.value(QStringLiteral("math/op"), 0).toInt(), 0, 4));
     m_viewSettings.mathA     = std::min(s.value(QStringLiteral("math/a"), 0).toUInt(), 1U);
@@ -1824,7 +1863,9 @@ void MainWindow::SaveSettings() const
     s.setValue(QStringLiteral("display/persistence"), static_cast<int>(m_display.persistence));
     s.setValue(QStringLiteral("display/dots"), m_display.dots);
     s.setValue(QStringLiteral("display/xy"), m_display.xy);
-    s.setValue(QStringLiteral("display/gridLabels"), m_display.gridLabels);
+    s.setValue(QStringLiteral("display/gridTime"), m_display.gridTime);
+    s.setValue(QStringLiteral("display/gridCh1"), m_display.gridVolts[0]);
+    s.setValue(QStringLiteral("display/gridCh2"), m_display.gridVolts[1]);
     s.setValue(QStringLiteral("math/op"), static_cast<int>(m_viewSettings.math));
     s.setValue(QStringLiteral("math/a"), static_cast<uint>(m_viewSettings.mathA));
     s.setValue(QStringLiteral("math/b"), static_cast<uint>(m_viewSettings.mathB));

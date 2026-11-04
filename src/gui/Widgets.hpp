@@ -4,6 +4,8 @@
 // a glance, one click, touch friendly) and collapsible sections for what is rarely needed.
 
 #include <QColor>
+#include <QIcon>
+#include <QList>
 #include <QStringList>
 #include <QWidget>
 
@@ -24,6 +26,7 @@ public:
     void SetIndex(int index);                             // does not emit IndexChanged()
     void SetAccent(const QColor& color);                  // colour of the selected segment
     void SetToolTips(const QStringList& tips);            // one per segment
+    void SetIcons(const QList<QIcon>& icons);             // one per segment, instead of the labels
     void SetSegmentColor(int index, const QColor& color); // for a segment named after a channel
 
     // Independent toggles instead of one choice: use IsChecked() and SetChecked().
