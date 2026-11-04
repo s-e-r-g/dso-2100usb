@@ -131,6 +131,8 @@ private:
     void    DrawGridTicks(QPainter& p) const;
     void    DrawGridLabels(QPainter& p) const;
     void    DrawMarkers(QPainter& p) const;
+    void    DrawDragValue(QPainter& p, const QString& text, const QColor& color, const QPointF& at,
+                          bool alignRight) const;
     void    DrawCursors(QPainter& p);
     void    UpdatePersistence();
     QString CursorText() const;

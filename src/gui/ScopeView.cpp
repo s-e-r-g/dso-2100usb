@@ -42,6 +42,9 @@ constexpr double kVoltGutterPx   = 48;
 constexpr double kTimeGutterPx   = 18;
 constexpr double kLabelGapPx     = 6;
 constexpr double kLabelZero      = 1e-12;
+constexpr double kDragLinePx     = 2;
+constexpr double kDragValueGapPx = 6;
+constexpr double kDragValuePadPx = 6;
 constexpr double kDecodeBandPx   = 20;
 constexpr double kDecodeMarkerPx = 8;
 constexpr double kDecodeTagPx    = 32;
@@ -505,6 +508,23 @@ void ScopeView::DrawSpectrum(QPainter& p) const
                    .arg(Si(static_cast<double>(peak) * m_data->spectrumBinHz, "Hz")));
 }
 
+void ScopeView::DrawDragValue(QPainter& p, const QString& text, const QColor& color,
+                              const QPointF& at, bool alignRight) const
+{
+    // above the line, or below it near the top so it stays on the screen
+    const QRectF r   = TimeRect();
+    const double w   = p.fontMetrics().horizontalAdvance(text) + 2 * kDragValuePadPx;
+    const double h   = p.fontMetrics().height() + 2;
+    const double top = at.y() - h - kDragValueGapPx < r.top() ? at.y() + kDragValueGapPx
+                                                              : at.y() - h - kDragValueGapPx;
+    const QRectF box(alignRight ? at.x() - w : at.x(), top, w, h);
+    p.setPen(Qt::NoPen);
+    p.setBrush(color);
+    p.drawRoundedRect(box, 3, 3);
+    p.setPen(Qt::black);
+    p.drawText(box, Qt::AlignCenter, text);
+}
+
 void ScopeView::DrawMarkers(QPainter& p) const
 {
     const QRectF r = TimeRect();
@@ -531,6 +551,23 @@ void ScopeView::DrawMarkers(QPainter& p) const
         p.setPen(Qt::black);
         p.drawText(QRectF(outer, y - 8, kMarginLeft - 10, 16), Qt::AlignCenter,
                    QString::number(c + 1));
+        if (m_drag == Drag::kOffset && m_dragChannel == c)
+        {
+            const auto    ch     = static_cast<size_t>(c);
+            const double  offset = m_state.offsetDiv.at(ch);
+            const QColor  color  = Theme::kChannel.at(ch);
+            const QString sign   = offset > 0 ? QStringLiteral("+") : QString();
+            const QString volts  = QString::fromStdString(
+                Core::FormatSi(offset * m_state.voltsPerDiv.at(ch), "V", kLabelDigits));
+            p.setPen(QPen(color, kDragLinePx, Qt::DashLine));
+            p.drawLine(QPointF(r.left(), y), QPointF(r.right(), y));
+            DrawDragValue(p,
+                          tr("CH%1  %2 div  %3")
+                              .arg(c + 1)
+                              .arg(sign + QString::number(offset, 'f', 2))
+                              .arg(sign + volts),
+                          color, QPointF(r.left() + kDragValueGapPx, y), false);
+        }
     }
 
     // trigger level on the right edge
@@ -548,12 +585,14 @@ void ScopeView::DrawMarkers(QPainter& p) const
         p.setBrush(Theme::kTrigger);
         p.drawPolygon(tag);
         p.setPen(Qt::black);
-        p.drawText(QRectF(r.right() + 8, y - 8, kMarginRight - 10, 16), Qt::AlignCenter,
-                   QStringLiteral("T"));
+        p.drawText(QRectF(r.right() + 5, y - 8, kMarginRight - 7, 16), Qt::AlignCenter,
+                   QStringLiteral("T%1").arg(tc + 1));
         if (m_drag == Drag::kTrigger)
         {
-            p.setPen(QPen(Theme::kTrigger, 1, Qt::DashLine));
+            p.setPen(QPen(Theme::kTrigger, kDragLinePx, Qt::DashLine));
             p.drawLine(QPointF(r.left(), y), QPointF(r.right(), y));
+            DrawDragValue(p, tr("T%1 level  %2").arg(tc + 1).arg(Si(m_state.trigLevelV, "V")),
+                          Theme::kTrigger, QPointF(r.right() - kDragValueGapPx, y), true);
         }
     }
 
