@@ -23,6 +23,8 @@ public:
     // The capture on screen; `view` gives the scale and position of each trace.
     void SetCapture(const App::FramePtr& frame, const App::DisplayData& d, const ViewState& view);
 
+    void SetMargins(double left, double right); // lines the bar up with the plot below
+
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
 
@@ -53,6 +55,8 @@ private:
     std::array<double, 2> m_offsetDiv    = {0, 0};
     bool                  m_dragging     = false;
     double                m_grabOffset   = 0; // samples from the window centre to the mouse
+    double                m_marginLeft   = 24;
+    double                m_marginRight  = 24;
 };
 
 }

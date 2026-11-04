@@ -37,9 +37,9 @@ constexpr double kPinchStep      = 1.3;
 constexpr double kMaxOffsetDiv   = 5;
 constexpr int    kWheelStep      = 120;
 constexpr int    kLabelFontPx    = 11;
-constexpr int    kLabelDarker    = 170; // percent: the traces stay the brightest
 constexpr int    kLabelDigits    = 3;
-constexpr double kLabelHeightPx  = 14;
+constexpr double kVoltGutterPx   = 48;
+constexpr double kTimeGutterPx   = 18;
 constexpr double kLabelGapPx     = 6;
 constexpr double kLabelZero      = 1e-12;
 constexpr double kDecodeBandPx   = 20;
@@ -70,7 +70,8 @@ void ScopeView::SetState(const ViewState& s)
     const bool scaleChanged = s.secPerDiv != m_state.secPerDiv || s.delaySec != m_state.delaySec ||
                               s.voltsPerDiv != m_state.voltsPerDiv ||
                               s.offsetDiv != m_state.offsetDiv || s.xy != m_state.xy ||
-                              s.math != m_state.math;
+                              s.math != m_state.math || s.gridTime != m_state.gridTime ||
+                              s.gridVolts != m_state.gridVolts;
     m_state                 = s;
     if (scaleChanged)
     {
@@ -111,10 +112,23 @@ void ScopeView::resizeEvent(QResizeEvent* /*e*/)
 
 // ---------- geometry ----------
 
+double ScopeView::LeftMargin() const
+{
+    const bool gutter = m_state.gridVolts[0] && m_state.chOn[0] && !m_state.xy;
+    return kMarginLeft + (gutter ? kVoltGutterPx : 0);
+}
+
+double ScopeView::RightMargin() const
+{
+    const bool gutter = m_state.gridVolts[1] && m_state.chOn[1] && !m_state.xy;
+    return kMarginRight + (gutter ? kVoltGutterPx : 0);
+}
+
 QRectF ScopeView::TimeRect() const
 {
-    QRectF r(kMarginLeft, kMarginTop, width() - kMarginLeft - kMarginRight,
-             height() - kMarginTop - kMarginBottom);
+    const double bottom = kMarginBottom + (m_state.gridTime && !m_state.xy ? kTimeGutterPx : 0);
+    QRectF       r(LeftMargin(), kMarginTop, width() - LeftMargin() - RightMargin(),
+                   height() - kMarginTop - bottom);
     if (m_state.math == App::MathOp::kFft)
     {
         r.setHeight(r.height() * kTimeShareFft - kFftGap / 2);
@@ -268,6 +282,37 @@ void ScopeView::DrawXy(QPainter& p, const QColor& c) const
     }
 }
 
+void ScopeView::DrawGridTicks(QPainter& p) const
+{
+    if (m_state.xy)
+    {
+        return;
+    }
+    // the grid lines run on to their labels, under the markers, so the eye can follow them
+    const QRectF r = TimeRect();
+    p.setPen(QPen(Theme::kGridAxis, 1));
+    for (int i = -Core::kVDivCount / 2; i <= Core::kVDivCount / 2; ++i)
+    {
+        const double y = DivToY(i);
+        if (m_state.gridVolts[0] && m_state.chOn[0])
+        {
+            p.drawLine(QPointF(r.left() - kMarginLeft + 2, y), QPointF(r.left(), y));
+        }
+        if (m_state.gridVolts[1] && m_state.chOn[1])
+        {
+            p.drawLine(QPointF(r.right(), y), QPointF(r.right() + kMarginRight - 2, y));
+        }
+    }
+    if (m_state.gridTime)
+    {
+        for (int i = 0; i <= Core::kHDivCount; ++i)
+        {
+            const double x = DivToX(i);
+            p.drawLine(QPointF(x, r.bottom()), QPointF(x, r.bottom() + kLabelGapPx / 2));
+        }
+    }
+}
+
 void ScopeView::DrawGridLabels(QPainter& p) const
 {
     if ((!m_state.gridTime && !m_state.gridVolts[0] && !m_state.gridVolts[1]) || m_state.xy)
@@ -290,43 +335,39 @@ void ScopeView::DrawGridLabels(QPainter& p) const
     p.setFont(f);
     const QFontMetricsF fm(f);
 
-    // time from the trigger along the bottom, above the bus row when there is one
-    const double y = r.bottom() - kLabelHeightPx - (m_state.decodeOn ? kDecodeBandPx + 2 : 0);
+    // time from the trigger, in the gutter under the plot
     p.setPen(Theme::kGridLabel);
-    double    lastRight = r.left();
-    const int lastLabel = m_state.gridTime ? Core::kHDivCount : 0;
-    for (int i = 1; i <= lastLabel; ++i) // the corner belongs to the volts
+    double    lastRight = 0;
+    const int lastLabel = m_state.gridTime ? Core::kHDivCount : -1;
+    for (int i = 0; i <= lastLabel; ++i)
     {
         const double  t    = (i - Core::kHDivCount / 2.0) * m_state.secPerDiv + m_state.delaySec;
         const QString text = signedSi(t, "s");
         const double  w    = fm.horizontalAdvance(text);
-        const double  x    = std::clamp(DivToX(i) - w / 2, r.left() + 2, r.right() - w - 2);
-        if (x < lastRight + kLabelGapPx)
+        const double  x    = std::clamp(DivToX(i) - w / 2, 2.0, width() - w - 2);
+        if (i > 0 && x < lastRight + kLabelGapPx)
         {
             continue; // narrow window: keep the labels readable, skip what does not fit
         }
-        p.drawText(QPointF(x, y + fm.ascent()), text);
+        p.drawText(QPointF(x, r.bottom() + kLabelGapPx / 2 + fm.ascent()), text);
         lastRight = x + w;
     }
 
-    // volts at each channel's position and scale: CH1 on the left edge, CH2 on the right
+    // volts at each channel's position and scale, in the gutters beside the markers
     for (size_t c = 0; c < m_state.chOn.size(); ++c)
     {
         if (!m_state.chOn.at(c) || !m_state.gridVolts.at(c))
         {
             continue;
         }
-        p.setPen(Theme::kChannel.at(c).darker(kLabelDarker));
+        p.setPen(Theme::kChannel.at(c));
         for (int i = -Core::kVDivCount / 2; i <= Core::kVDivCount / 2; ++i)
         {
             const QString text =
                 signedSi((i - m_state.offsetDiv.at(c)) * m_state.voltsPerDiv.at(c), "V");
-            const double x  = c == 0 ? r.left() + 3 : r.right() - fm.horizontalAdvance(text) - 3;
-            const double yy = std::max(DivToY(i) + fm.ascent() / 2, r.top() + fm.ascent() + 1);
-            if (yy < y) // the rows below hold the time labels and the bus
-            {
-                p.drawText(QPointF(x, yy), text);
-            }
+            const double x = c == 0 ? r.left() - kMarginLeft - fm.horizontalAdvance(text)
+                                    : r.right() + kMarginRight;
+            p.drawText(QPointF(x, DivToY(i) + fm.ascent() / 2 - 1), text);
         }
     }
     p.restore();
@@ -480,14 +521,16 @@ void ScopeView::DrawMarkers(QPainter& p) const
         }
         const double y =
             std::clamp(DivToY(m_state.offsetDiv.at(static_cast<size_t>(c))), r.top(), r.bottom());
-        QPolygonF tag;
-        tag << QPointF(2, y - 8) << QPointF(r.left() - 8, y - 8) << QPointF(r.left() - 1, y)
-            << QPointF(r.left() - 8, y + 8) << QPointF(2, y + 8);
+        QPolygonF    tag;
+        const double outer = r.left() - kMarginLeft + 2;
+        tag << QPointF(outer, y - 8) << QPointF(r.left() - 8, y - 8) << QPointF(r.left() - 1, y)
+            << QPointF(r.left() - 8, y + 8) << QPointF(outer, y + 8);
         p.setPen(Qt::NoPen);
         p.setBrush(Theme::kChannel.at(static_cast<size_t>(c)));
         p.drawPolygon(tag);
         p.setPen(Qt::black);
-        p.drawText(QRectF(2, y - 8, r.left() - 10, 16), Qt::AlignCenter, QString::number(c + 1));
+        p.drawText(QRectF(outer, y - 8, kMarginLeft - 10, 16), Qt::AlignCenter,
+                   QString::number(c + 1));
     }
 
     // trigger level on the right edge
@@ -497,10 +540,10 @@ void ScopeView::DrawMarkers(QPainter& p) const
         const double y  = std::clamp(
             DivToY(m_state.trigLevelV / m_state.voltsPerDiv.at(tc) + m_state.offsetDiv.at(tc)),
             r.top(), r.bottom());
-        QPolygonF tag;
-        tag << QPointF(width() - 2, y - 8) << QPointF(r.right() + 8, y - 8)
-            << QPointF(r.right() + 1, y) << QPointF(r.right() + 8, y + 8)
-            << QPointF(width() - 2, y + 8);
+        QPolygonF    tag;
+        const double outer = r.right() + kMarginRight - 2;
+        tag << QPointF(outer, y - 8) << QPointF(r.right() + 8, y - 8) << QPointF(r.right() + 1, y)
+            << QPointF(r.right() + 8, y + 8) << QPointF(outer, y + 8);
         p.setPen(Qt::NoPen);
         p.setBrush(Theme::kTrigger);
         p.drawPolygon(tag);
@@ -681,6 +724,7 @@ void ScopeView::paintEvent(QPaintEvent* /*e*/)
     p.restore();
     p.setRenderHint(QPainter::Antialiasing, false);
 
+    DrawGridTicks(p);
     DrawMarkers(p);
     DrawGridLabels(p);
     DrawDecode(p);

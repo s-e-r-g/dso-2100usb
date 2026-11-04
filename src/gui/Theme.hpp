@@ -17,7 +17,7 @@ inline const QColor                kText{0xd8, 0xdc, 0xe0};
 inline const QColor                kTrigger{0xff, 0x8c, 0x1a};
 inline const QColor                kMath{0xff, 0x4f, 0xd8};
 inline const QColor                kCursor{0xf0, 0xf0, 0xf0};
-inline const QColor                kGridLabel{0x6a, 0x72, 0x7a};
+inline const QColor                kGridLabel{0x9a, 0xa1, 0xaa};
 inline const QColor                kRunning{0x3f, 0xc8, 0x5a};
 inline const QColor                kArmed{0xff, 0xb0, 0x30};
 inline const QColor                kStopped{0xe8, 0x50, 0x50};

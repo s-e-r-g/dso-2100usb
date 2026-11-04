@@ -1184,6 +1184,7 @@ void MainWindow::UpdateView()
     m_display.decodeOn = m_viewSettings.decode.enabled;
     m_recordBar->setVisible(!m_display.xy); // XY has no time axis
     m_view->SetState(m_display);
+    m_recordBar->SetMargins(m_view->LeftMargin(), m_view->RightMargin());
     UpdateBadges();
     if (!m_running && m_lastFrame)
     {
