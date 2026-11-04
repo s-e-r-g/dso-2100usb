@@ -48,11 +48,13 @@ The scope enumerates twice. The original software used two kernel drivers for th
       hardware trigger (always used for EXT).
 - [x] Acquire: normal, averaging 2..128.
 - [x] Display: vectors / dots, persistence (short, long, infinite), XY mode.
+- [x] Numbers on the grid: time from the trigger, volts of the last used channel.
 - [x] Math: A+B, A-B, AxB, FFT (rectangle, Hann, Hamming, Blackman, flat top) in a split pane.
 - [x] Measurements with statistics (mean/min/max): frequency, period, Vpp, Vmax, Vmin, Vamp,
       Vtop, Vbase, Vavg, Vrms, +/- width, duty, rise, fall, overshoot; per CH1/CH2/Math.
 - [x] Cursors: time, voltage, both; readout of delta and 1/delta.
 - [x] Reference waveforms R1/R2.
+- [x] I2C decoding: bytes on a bus band on screen, a log, and a trigger on START.
 - [x] Zero calibration per channel and range, saved.
 - [x] Export: screenshot PNG, waveform CSV (whole record, time from trigger).
 - [x] All settings saved between sessions.
